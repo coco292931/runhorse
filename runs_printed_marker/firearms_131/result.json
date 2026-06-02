@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "class_id": 0,
+  "class_name": "A-枪支",
+  "confidence": 0.9997575879096985,
+  "low_confidence": false,
+  "red_quad": [
+    [
+      0.0,
+      1417.0
+    ],
+    [
+      1416.0,
+      1417.0
+    ],
+    [
+      1416.0,
+      2007.0
+    ],
+    [
+      0.0,
+      2007.0
+    ]
+  ],
+  "page_quad": [
+    [
+      0.0,
+      1.0
+    ],
+    [
+      1416.0,
+      1.0
+    ],
+    [
+      1416.0,
+      2007.0
+    ],
+    [
+      0.0,
+      2007.0
+    ]
+  ],
+  "red_area": 835440.0,
+  "red_aspect": 2.4,
+  "red_fill_ratio": 1.0,
+  "rectified_size": [
+    720,
+    1020
+  ],
+  "crop_size": [
+    720,
+    720
+  ],
+  "model": "runs_yolov8_cls\\zoumaguangbei_cls\\weights\\best.pt"
+}

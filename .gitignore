@@ -1,0 +1,12 @@
+.claude/
+__pycache__/
+*.pyc
+*.cache
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.gif
+*.webp
+*.tif
+*.tiff

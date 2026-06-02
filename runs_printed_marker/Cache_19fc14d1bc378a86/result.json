@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "class_id": 2,
+  "class_name": "C-急救包",
+  "confidence": 0.673236608505249,
+  "low_confidence": false,
+  "red_quad": [
+    [
+      568.75,
+      562.07
+    ],
+    [
+      652.04,
+      554.89
+    ],
+    [
+      663.24,
+      684.81
+    ],
+    [
+      579.95,
+      691.99
+    ]
+  ],
+  "page_quad": [
+    [
+      541.87,
+      250.28
+    ],
+    [
+      625.16,
+      243.1
+    ],
+    [
+      663.24,
+      684.81
+    ],
+    [
+      579.95,
+      691.99
+    ]
+  ],
+  "red_area": 6647.5,
+  "red_aspect": 1.5596876358298015,
+  "red_fill_ratio": 0.6097748326323298,
+  "rectified_size": [
+    720,
+    1020
+  ],
+  "crop_size": [
+    720,
+    720
+  ],
+  "model": "runs_yolov8_cls\\zoumaguangbei_cls\\weights\\best.pt"
+}

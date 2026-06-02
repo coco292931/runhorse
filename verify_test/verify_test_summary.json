@@ -1,0 +1,722 @@
+[
+  {
+    "class": "A-枪支",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\A-枪支\\firearms_004.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\A-枪支\\firearms_004.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "A-枪支",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\A-枪支\\firearms_049.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\A-枪支\\firearms_049.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "A-枪支",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\A-枪支\\firearms_064.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\A-枪支\\firearms_064.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "A-枪支",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\A-枪支\\firearms_131.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\A-枪支\\firearms_131.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "A-枪支",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\A-枪支\\firearms_179.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\A-枪支\\firearms_179.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "B-爆炸物",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\B-爆炸物\\explosive_025.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\B-爆炸物\\explosive_025.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "B-爆炸物",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\B-爆炸物\\explosive_070.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\B-爆炸物\\explosive_070.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "B-爆炸物",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\B-爆炸物\\explosive_093.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\B-爆炸物\\explosive_093.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "B-爆炸物",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\B-爆炸物\\explosive_105.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\B-爆炸物\\explosive_105.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "B-爆炸物",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\B-爆炸物\\explosive_132.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\B-爆炸物\\explosive_132.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "C-急救包",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\C-急救包\\first_aid_kit_035.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\C-急救包\\first_aid_kit_035.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "C-急救包",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\C-急救包\\first_aid_kit_054.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\C-急救包\\first_aid_kit_054.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "C-急救包",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\C-急救包\\first_aid_kit_097.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\C-急救包\\first_aid_kit_097.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "C-急救包",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\C-急救包\\first_aid_kit_098.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\C-急救包\\first_aid_kit_098.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "C-急救包",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\C-急救包\\first_aid_kit_139.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\C-急救包\\first_aid_kit_139.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "D-望远镜",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\D-望远镜\\telescope_028.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\D-望远镜\\telescope_028.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "D-望远镜",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\D-望远镜\\telescope_109.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\D-望远镜\\telescope_109.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "D-望远镜",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\D-望远镜\\telescope_110.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\D-望远镜\\telescope_110.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "D-望远镜",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\D-望远镜\\telescope_112.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\D-望远镜\\telescope_112.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "D-望远镜",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\D-望远镜\\telescope_138.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\D-望远镜\\telescope_138.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "E-装甲车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\E-装甲车\\armoured_car_008.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\E-装甲车\\armoured_car_008.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "E-装甲车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\E-装甲车\\armoured_car_021.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\E-装甲车\\armoured_car_021.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "E-装甲车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\E-装甲车\\armoured_car_041.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\E-装甲车\\armoured_car_041.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "E-装甲车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\E-装甲车\\armoured_car_091.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\E-装甲车\\armoured_car_091.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "E-装甲车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\E-装甲车\\armoured_car_114.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\E-装甲车\\armoured_car_114.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "F-救护车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\F-救护车\\ambulance_018.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\F-救护车\\ambulance_018.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "F-救护车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\F-救护车\\ambulance_112.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\F-救护车\\ambulance_112.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "F-救护车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\F-救护车\\ambulance_117.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\F-救护车\\ambulance_117.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "F-救护车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\F-救护车\\ambulance_119.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\F-救护车\\ambulance_119.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  },
+  {
+    "class": "F-救护车",
+    "source": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset\\test\\F-救护车\\ambulance_126.jpg",
+    "output": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\verify_test\\F-救护车\\ambulance_126.jpg",
+    "red_color": [
+      255,
+      0,
+      0
+    ],
+    "dpi": 300,
+    "image_size_cm": 12.0,
+    "red_height_cm": 5.0,
+    "output_size_cm": [
+      12.0,
+      17.0
+    ],
+    "original_width": 1417,
+    "original_height": 1417,
+    "output_width": 1417,
+    "output_height": 2008,
+    "image_area_height": 1417,
+    "patch_top": 1417,
+    "patch_height": 591
+  }
+]

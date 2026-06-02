@@ -1,0 +1,103 @@
+{
+  "source_root": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）",
+  "output_root": "C:\\Users\\wyc18\\Downloads\\走马观碑数据集（大改）\\走马观碑数据集（大改）\\yolo_cls_dataset_camstyle",
+  "ratios": {
+    "train": 0.7,
+    "val": 0.2,
+    "test": 0.1
+  },
+  "seed": 42,
+  "copy_mode": "copy",
+  "preprocess": {
+    "applied_splits": [
+      "train",
+      "val",
+      "test"
+    ],
+    "output_size": [
+      100,
+      100
+    ],
+    "rotation_range_degrees": [
+      -10.0,
+      10.0
+    ],
+    "crop_scale_range": [
+      0.9,
+      1.1
+    ],
+    "translation_ratio": 0.03,
+    "brightness_range": [
+      0.5,
+      0.8
+    ],
+    "contrast_range": [
+      1.2,
+      1.6
+    ],
+    "noise_amount_range": [
+      6,
+      22
+    ],
+    "blur_radius_range": [
+      0.8,
+      3
+    ]
+  },
+  "classes": [
+    {
+      "name": "A-枪支",
+      "total": 54,
+      "splits": {
+        "train": 37,
+        "val": 10,
+        "test": 7
+      }
+    },
+    {
+      "name": "B-爆炸物",
+      "total": 50,
+      "splits": {
+        "train": 35,
+        "val": 10,
+        "test": 5
+      }
+    },
+    {
+      "name": "C-急救包",
+      "total": 51,
+      "splits": {
+        "train": 35,
+        "val": 10,
+        "test": 6
+      }
+    },
+    {
+      "name": "D-望远镜",
+      "total": 53,
+      "splits": {
+        "train": 37,
+        "val": 10,
+        "test": 6
+      }
+    },
+    {
+      "name": "E-装甲车",
+      "total": 41,
+      "splits": {
+        "train": 28,
+        "val": 8,
+        "test": 5
+      }
+    },
+    {
+      "name": "F-救护车",
+      "total": 55,
+      "splits": {
+        "train": 38,
+        "val": 11,
+        "test": 6
+      }
+    }
+  ]
+}
