@@ -1,0 +1,10 @@
+# Compiled binaries
+runhorse_recognize
+runhorse_http
+
+# Cross-compilation sysroot (headers & libs from board)
+sysroot/
+
+# Large files
+*.zip
+*.tar.gz
