@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 *.cache
+*.log
+*.err.log
 *.jpg
 *.jpeg
 *.png
@@ -10,3 +12,8 @@ __pycache__/
 *.webp
 *.tif
 *.tiff
+runs/
+runs_*/
+yolo_cls_dataset*/
+*.pt
+recognize_printed_marker_tkinter_config.json
