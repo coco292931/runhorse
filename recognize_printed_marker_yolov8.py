@@ -15,6 +15,7 @@ IMAGE_HEIGHT_CM = 12.0
 RED_HEIGHT_CM = 5.0
 PAGE_HEIGHT_CM = IMAGE_HEIGHT_CM + RED_HEIGHT_CM
 EXTEND_RATIO = IMAGE_HEIGHT_CM / RED_HEIGHT_CM
+YOLO_IMGSZ_MULTIPLE = 32
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-gain", type=float, help="Requested camera gain.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="YOLOv8 classification model path.")
     parser.add_argument("--device", default="cpu", help="YOLO device: cpu, 0, 0,1, etc.")
-    parser.add_argument("--imgsz", type=int, default=100, help="YOLO classification image size.")
+    parser.add_argument("--imgsz", type=int, default=128, help="YOLO classification image size.")
     parser.add_argument("--output-width", type=int, default=720, help="Rectified 12x17 image width in pixels.")
     parser.add_argument("--save-dir", type=Path, default=Path("runs_printed_marker"), help="Output directory.")
     parser.add_argument("--json-name", default="result.json", help="Image-mode result JSON name.")
@@ -52,6 +53,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-debug", action="store_true", help="Save mask, overlay, rectified image, and crop.")
     parser.add_argument("--show", action="store_true", help="Show OpenCV windows.")
     parser.add_argument("--no-save", action="store_true", help="Do not save outputs.")
+    parser.add_argument("--crop-scale", type=float, default=1.0, help="Postprocess selected image scale before classification.")
+    parser.add_argument("--crop-exposure", type=float, default=1.0, help="Postprocess selected image exposure before classification.")
+    parser.add_argument("--crop-contrast", type=float, default=1.0, help="Postprocess selected image contrast before classification.")
+    parser.add_argument("--crop-blur", type=float, default=0.0, help="Postprocess selected image Gaussian blur radius before classification.")
     return parser.parse_args()
 
 
@@ -247,6 +252,67 @@ def crop_image_area(rectified: np.ndarray, output_width: int) -> np.ndarray:
     return rectified[:output_width, :output_width].copy()
 
 
+def center_scale_image(image: np.ndarray, scale: float) -> np.ndarray:
+    scale = max(0.05, float(scale))
+    if abs(scale - 1.0) < 1e-6:
+        return image
+
+    height, width = image.shape[:2]
+    scaled_width = max(1, int(round(width * scale)))
+    scaled_height = max(1, int(round(height * scale)))
+    resized = cv2.resize(image, (scaled_width, scaled_height), interpolation=cv2.INTER_LINEAR)
+
+    if scale > 1.0:
+        left = max(0, (scaled_width - width) // 2)
+        top = max(0, (scaled_height - height) // 2)
+        return resized[top:top + height, left:left + width].copy()
+
+    pad_left = max(0, (width - scaled_width) // 2)
+    pad_right = max(0, width - scaled_width - pad_left)
+    pad_top = max(0, (height - scaled_height) // 2)
+    pad_bottom = max(0, height - scaled_height - pad_top)
+    padded = cv2.copyMakeBorder(
+        resized,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        cv2.BORDER_REPLICATE,
+    )
+    return padded[:height, :width].copy()
+
+
+def apply_crop_postprocess(crop: np.ndarray, args: argparse.Namespace) -> np.ndarray:
+    scale = float(getattr(args, "crop_scale", 1.0))
+    exposure = float(getattr(args, "crop_exposure", 1.0))
+    contrast = float(getattr(args, "crop_contrast", 1.0))
+    blur = float(getattr(args, "crop_blur", 0.0))
+
+    processed = center_scale_image(crop, scale)
+    if abs(exposure - 1.0) > 1e-6:
+        processed = cv2.convertScaleAbs(processed, alpha=max(0.0, exposure), beta=0)
+    if abs(contrast - 1.0) > 1e-6:
+        data = processed.astype(np.float32)
+        processed = np.clip((data - 127.5) * max(0.0, contrast) + 127.5, 0, 255).astype(np.uint8)
+    if blur > 0:
+        processed = cv2.GaussianBlur(processed, (0, 0), blur)
+    return processed
+
+
+def normalize_yolo_imgsz(imgsz: int | float) -> int:
+    target_size = max(YOLO_IMGSZ_MULTIPLE, int(round(imgsz)))
+    return ((target_size + YOLO_IMGSZ_MULTIPLE - 1) // YOLO_IMGSZ_MULTIPLE) * YOLO_IMGSZ_MULTIPLE
+
+
+def resize_for_yolo_input(crop: np.ndarray, imgsz: int) -> np.ndarray:
+    target_size = normalize_yolo_imgsz(imgsz)
+    height, width = crop.shape[:2]
+    if width == target_size and height == target_size:
+        return crop
+    interpolation = cv2.INTER_AREA if target_size < max(width, height) else cv2.INTER_LINEAR
+    return cv2.resize(crop, (target_size, target_size), interpolation=interpolation)
+
+
 def classify_crop(model, crop: np.ndarray, imgsz: int, device: str, conf_thres: float, first_aid_conf_thres: float) -> dict[str, Any]:
     result = model.predict(source=crop, imgsz=imgsz, device=device, verbose=False)[0]
     top1 = int(result.probs.top1)
@@ -326,12 +392,19 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
     if not detected["success"]:
         return {"success": False, "error": detected["error"], "mask": detected["mask"]}
 
+    raw_imgsz = int(round(args.imgsz))
+    yolo_imgsz = normalize_yolo_imgsz(raw_imgsz)
+    if yolo_imgsz != raw_imgsz:
+        print(f"YOLO imgsz adjusted: {raw_imgsz} -> {yolo_imgsz} ({YOLO_IMGSZ_MULTIPLE}x multiple)")
+        args.imgsz = yolo_imgsz
+
     red_quad = detected["red_quad"]
     image_quad = estimate_image_quad_from_red(red_quad)
     page_quad = estimate_page_quad_from_red(red_quad)
-    crop = warp_image_area(frame, image_quad, args.output_width)
+    processed_crop = apply_crop_postprocess(warp_image_area(frame, image_quad, args.output_width), args)
+    crop = resize_for_yolo_input(processed_crop, yolo_imgsz)
     rectified = warp_page(frame, page_quad, args.output_width)
-    cls = classify_crop(model, crop, args.imgsz, args.device, args.conf_thres, args.first_aid_conf_thres)
+    cls = classify_crop(model, crop, yolo_imgsz, args.device, args.conf_thres, args.first_aid_conf_thres)
     warning = page_warning(image_quad, frame.shape)
 
     result: dict[str, Any] = {
@@ -351,6 +424,8 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
         "red_aspect": detected["aspect"],
         "red_fill_ratio": detected["fill_ratio"],
         "rectified_size": [int(rectified.shape[1]), int(rectified.shape[0])],
+        "processed_crop_size": [int(processed_crop.shape[1]), int(processed_crop.shape[0])],
+        "yolo_imgsz": yolo_imgsz,
         "crop_size": [int(crop.shape[1]), int(crop.shape[0])],
         "model": str(args.model),
         "mask": detected["mask"],
