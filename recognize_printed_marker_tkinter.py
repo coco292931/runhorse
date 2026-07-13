@@ -36,6 +36,10 @@ CONFIG_CONTROL_DEFAULTS = {
     "crop_exposure": 1.0,
     "crop_contrast": 1.0,
     "crop_blur": 0.0,
+    "roi_top": 0.2,
+    "roi_bottom": 0.78,
+    "roi_left": 0.1,
+    "roi_right": 0.9,
 }
 INTEGER_CONTROL_NAMES = {
     "red_h_low1",
@@ -84,6 +88,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crop-exposure", type=float, default=1.0, help="Postprocess selected image exposure before classification.")
     parser.add_argument("--crop-contrast", type=float, default=1.0, help="Postprocess selected image contrast before classification.")
     parser.add_argument("--crop-blur", type=float, default=0.0, help="Postprocess selected image Gaussian blur radius before classification.")
+    parser.add_argument("--roi-top", type=float, default=0.2, help="ROI top ratio (0-1).")
+    parser.add_argument("--roi-bottom", type=float, default=0.78, help="ROI bottom ratio (0-1).")
+    parser.add_argument("--roi-left", type=float, default=0.1, help="ROI left ratio (0-1).")
+    parser.add_argument("--roi-right", type=float, default=0.9, help="ROI right ratio (0-1).")
     parser.add_argument(
         "--config",
         type=Path,
@@ -202,6 +210,10 @@ class RealtimeRecognizerApp:
             ("red_v_min", "Red V min", 0.0, 255.0, float(self.args.red_v_min), True),
             ("min_red_area", "Min red area", 1.0, 1000.0, float(self.args.min_red_area), False),
             ("morph_kernel", "Morph kernel", 1.0, 15.0, float(self.args.morph_kernel), True),
+            ("roi_top", "ROI top", 0.0, 1.0, float(self.args.roi_top), False),
+            ("roi_bottom", "ROI bottom", 0.0, 1.0, float(self.args.roi_bottom), False),
+            ("roi_left", "ROI left", 0.0, 1.0, float(self.args.roi_left), False),
+            ("roi_right", "ROI right", 0.0, 1.0, float(self.args.roi_right), False),
         ]
 
         for row, (name, label, start, end, value, integer_only) in enumerate(control_specs):

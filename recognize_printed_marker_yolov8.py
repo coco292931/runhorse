@@ -57,6 +57,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crop-exposure", type=float, default=1.0, help="Postprocess selected image exposure before classification.")
     parser.add_argument("--crop-contrast", type=float, default=1.0, help="Postprocess selected image contrast before classification.")
     parser.add_argument("--crop-blur", type=float, default=0.0, help="Postprocess selected image Gaussian blur radius before classification.")
+    parser.add_argument("--roi-top", type=float, default=0.2, help="ROI top ratio (0-1, 0=top).")
+    parser.add_argument("--roi-bottom", type=float, default=0.78, help="ROI bottom ratio (0-1, 1=bottom).")
+    parser.add_argument("--roi-left", type=float, default=0.1, help="ROI left ratio (0-1, 0=left edge).")
+    parser.add_argument("--roi-right", type=float, default=0.9, help="ROI right ratio (0-1, 1=right edge).")
     return parser.parse_args()
 
 
@@ -133,6 +137,17 @@ def make_red_mask(frame: np.ndarray, args: argparse.Namespace) -> np.ndarray:
     lower2 = np.array([args.red_h_low2, args.red_s_min, args.red_v_min], dtype=np.uint8)
     upper2 = np.array([args.red_h_high2, 255, 255], dtype=np.uint8)
     mask = cv2.bitwise_or(cv2.inRange(hsv, lower1, upper1), cv2.inRange(hsv, lower2, upper2))
+
+    # ROI：仅保留 [roi_left:roi_right, roi_top:roi_bottom] 区域内的红块
+    H, W = frame.shape[:2]
+    if args.roi_top > 0.0 or args.roi_bottom < 1.0 or args.roi_left > 0.0 or args.roi_right < 1.0:
+        roi_mask = np.zeros_like(mask)
+        y0 = int(round(args.roi_top * H))
+        y1 = int(round(args.roi_bottom * H))
+        x0 = int(round(args.roi_left * W))
+        x1 = int(round(args.roi_right * W))
+        roi_mask[y0:y1, x0:x1] = 255
+        mask = cv2.bitwise_and(mask, roi_mask)
 
     kernel_size = max(1, args.morph_kernel)
     if kernel_size % 2 == 0:
@@ -359,6 +374,14 @@ def draw_polyline(image: np.ndarray, quad: np.ndarray, color: tuple[int, int, in
 
 def draw_overlay(frame: np.ndarray, result: dict[str, Any]) -> np.ndarray:
     overlay = frame.copy()
+    # 画 ROI 范围框（黄色虚线效果：实线+半透明底色方便辨识）
+    if "roi" in result:
+        roi = result["roi"]
+        y0, y1, x0, x1 = roi["y0"], roi["y1"], roi["x0"], roi["x1"]
+        if x0 > 0 or y0 > 0 or x1 < overlay.shape[1] - 1 or y1 < overlay.shape[0] - 1:
+            cv2.rectangle(overlay, (x0, y0), (x1, y1), (0, 255, 255), 2)
+            cv2.putText(overlay, "ROI", (x0 + 4, y0 + 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
     if result.get("red_quad") is not None:
         draw_polyline(overlay, np.array(result["red_quad"], dtype=np.float32), (0, 255, 0), "red")
     if result.get("image_quad") is not None:
@@ -387,10 +410,20 @@ def recognize_frame(frame: np.ndarray, model, args: argparse.Namespace) -> tuple
     return result, overlay
 
 
+def _make_roi_dict(frame: np.ndarray, args: argparse.Namespace) -> dict[str, int]:
+    H, W = frame.shape[:2]
+    return {
+        "y0": int(round(args.roi_top * H)),
+        "y1": int(round(args.roi_bottom * H)),
+        "x0": int(round(args.roi_left * W)),
+        "x1": int(round(args.roi_right * W)),
+    }
+
+
 def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[str, Any]:
     detected = detect_red_patch(frame, args)
     if not detected["success"]:
-        return {"success": False, "error": detected["error"], "mask": detected["mask"]}
+        return {"success": False, "error": detected["error"], "mask": detected["mask"], "roi": _make_roi_dict(frame, args)}
 
     raw_imgsz = int(round(args.imgsz))
     yolo_imgsz = normalize_yolo_imgsz(raw_imgsz)
@@ -431,6 +464,7 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
         "mask": detected["mask"],
         "rectified": rectified,
         "crop": crop,
+        "roi": _make_roi_dict(frame, args),
     }
     if warning:
         result["warning"] = warning
