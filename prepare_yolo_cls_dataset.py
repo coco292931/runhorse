@@ -38,13 +38,13 @@ TARGET_SIZE = (128, 128)
 ROTATION_RANGE = (-10.0, 10.0)       # 随机旋转角度范围（度）
 CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
 TRANSLATION_RATIO = 0.03              # 随机平移比例（相对原图尺寸）
-BRIGHTNESS_RANGE = (0.6, 0.8)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
-CONTRAST_RANGE = (0.8, 2.0)           # 对比度调整范围（>1 增强对比）
-NOISE_AMOUNT_RANGE = (40, 120)          # 高斯噪声强度范围
-BLUR_RADIUS_RANGE = (20, 40)          # 高斯模糊半径范围（像素）
-SATURATION_RANGE = (0.5, 0.8)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
-SHARPNESS_RANGE = (1, 2.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
-JPEG_QUALITY_RANGE = (100,100)         # JPEG 压缩质量范围（模拟传输压缩损失）
+BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
+CONTRAST_RANGE = (0.6, 2.0)           # 对比度调整范围（>1 增强对比）
+NOISE_AMOUNT_RANGE = (80, 240)          # 高斯噪声强度范围
+BLUR_RADIUS_RANGE = (20, 50)          # 高斯模糊半径范围（像素）
+SATURATION_RANGE = (0.4, 0.8)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
+SHARPNESS_RANGE = (0.8, 2.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
+JPEG_QUALITY_RANGE = (20,50)         # JPEG 压缩质量范围（模拟传输压缩损失）
 PERSPECTIVE_H_ANGLE_RANGE = (-8,8)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
 PERSPECTIVE_V_ANGLE_RANGE = (-15.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
 ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
@@ -244,7 +244,7 @@ def whole_rotate(image: Image.Image, rng: random.Random) -> Image.Image:
     angle = rng.choice([0, 90, 180, 270])
     if angle == 0:
         return image
-    return image.rotate(angle)
+    return image.rotate(angle, expand=True, fillcolor=(255, 255, 255))
 
 
 def simulate_jpeg_compress(image: Image.Image, rng: random.Random, quality_range: tuple[int, int]) -> Image.Image:
@@ -332,29 +332,39 @@ def _find_perspective_coeffs(
     return np.linalg.solve(A, B).tolist()
 
 
-def _fill_background_white(image: Image.Image) -> Image.Image:
-    """将图像粘贴到纯白背景上，覆盖旋转/透视产生的灰色边缘。"""
-    bg = Image.new("RGB", image.size, (255, 255, 255))
-    bg.paste(image, mask=image.split()[3] if image.mode == "RGBA" else None)
-    return bg
+def _replace_dark_pixels_white(image: Image.Image, threshold: int = 30) -> Image.Image:
+    """
+    将图像中接近纯黑的像素（R/G/B 均 <= threshold）替换为纯白。
+    用于消除原图自带的黑色边框，以及旋转/透视变换产生的黑色填充边缘。
+    threshold=30 可覆盖纯黑和极深灰，不影响正常内容。
+    """
+    import numpy as np
+    arr = np.array(image)                          # shape: (H, W, 3), dtype=uint8
+    mask = (arr[:, :, 0] <= threshold) & (arr[:, :, 1] <= threshold) & (arr[:, :, 2] <= threshold)
+    arr[mask] = 255
+    return Image.fromarray(arr)
 
 
 def preprocess_image(source: Path, rng: random.Random, target_size: tuple[int, int]) -> Image.Image:
     """
     对单张图片执行完整预处理流程（数据增强）：
      1. 读取图片，根据 EXIF 方向信息自动旋转摆正，转为 RGB
-     2. 随机小角度旋转（BILINEAR 插值）
-     3. 随机整体旋转 0/90/180/270 度（由 ENABLE_WHOLE_ROTATION 常量控制，--no-whole-rotation 可覆盖）
-     4. 随机透视变换（设 PERSPECTIVE_H/V_ANGLE_RANGE=(0,0) 关闭）
-     5. 将图像粘贴到纯白背景上，覆盖旋转/透视产生的边缘
-     6. 随机裁切（模拟构图变化）
-     7. 随机调整亮度、对比度、饱和度、锐化
-     8. 添加随机高斯噪声、模糊
-     9. 模拟 JPEG 压缩伪影
-    10. 缩放到统一目标尺寸
+     2. 将原图中的黑色边框替换为白色（统一底色）
+     3. 随机小角度旋转（白色填充边缘）
+     4. 随机整体旋转 0/90/180/270 度
+     5. 随机透视变换（白色填充边缘）
+     6. 再次替换黑色像素为白色（消除变换产生的黑边）
+     7. 随机裁切（模拟构图变化）
+     8. 随机模糊
+     9. 随机调整亮度、对比度、饱和度、锐化（白色底色不受影响）
+    10. 添加随机高斯噪声
+    11. 模拟 JPEG 压缩伪影
+    12. 缩放到统一目标尺寸
     """
     with Image.open(source) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
+        # 先把原图黑框替换为白色，统一底色
+        image = _replace_dark_pixels_white(image)
         image = image.rotate(
             rng.uniform(*ROTATION_RANGE),
             resample=Image.Resampling.BILINEAR,
@@ -365,16 +375,20 @@ def preprocess_image(source: Path, rng: random.Random, target_size: tuple[int, i
             image = whole_rotate(image, rng)
         if PERSPECTIVE_H_ANGLE_RANGE != (0, 0) or PERSPECTIVE_V_ANGLE_RANGE != (0, 0):
             image = perspective_transform(image, rng, PERSPECTIVE_H_ANGLE_RANGE, PERSPECTIVE_V_ANGLE_RANGE)
-        image = _fill_background_white(image)
+        # 变换完成后再次清除黑边，确保底色纯白
+        image = _replace_dark_pixels_white(image)
         image = random_crop(image, rng)
+        blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
+        image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
+        # 底色已确保为白色，颜色变换不影响背景
         image = ImageEnhance.Brightness(image).enhance(rng.uniform(*BRIGHTNESS_RANGE))
         image = ImageEnhance.Contrast(image).enhance(rng.uniform(*CONTRAST_RANGE))
         image = ImageEnhance.Color(image).enhance(rng.uniform(*SATURATION_RANGE))
         image = ImageEnhance.Sharpness(image).enhance(rng.uniform(*SHARPNESS_RANGE))
         image = add_noise(image, rng)
-        blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
-        image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
         image = simulate_jpeg_compress(image, rng, JPEG_QUALITY_RANGE)
+        # JPEG 压缩可能在边缘引入色块，再清一次黑边后缩放
+        image = _replace_dark_pixels_white(image)
         return image.resize(target_size, Image.Resampling.LANCZOS)
 
 
