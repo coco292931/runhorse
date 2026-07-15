@@ -647,6 +647,15 @@ def estimate_marker_geometry(
         forward_axis, direction_info = direction_stabilizer.apply(forward_axis)
         width_axis = perpendicular_width_axis(forward_axis)
 
+    forward_axis, width_axis, image_above_red_forced, image_center_y = enforce_image_above_red(
+        forward_axis,
+        red_center,
+        center_image[0],
+        red_height_cm,
+        image_height_cm,
+        frame_shape,
+    )
+
     forward_projection = ground_points @ forward_axis
     width_projection = ground_points @ width_axis
     observed_width = float(np.percentile(width_projection, 95.0) - np.percentile(width_projection, 5.0))
@@ -696,6 +705,9 @@ def estimate_marker_geometry(
         "geometry_height_scale": height_scale,
         "route_axis_used": route_axis_used,
         "route_axis_anchor": route_axis_anchor,
+        "image_above_red_forced": image_above_red_forced,
+        "image_center_y": image_center_y,
+        "red_center_y": float(center_image[0][1]),
         **direction_info,
     }
 
@@ -940,6 +952,9 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
         "direction_history": int(geometry["direction_history"]),
         "direction_delta_deg": round(geometry["direction_delta_deg"], 2),
         "direction_reset": bool(geometry["direction_reset"]),
+        "image_above_red_forced": bool(geometry["image_above_red_forced"]),
+        "image_center_y": round(geometry["image_center_y"], 2),
+        "red_center_y": round(geometry["red_center_y"], 2),
         "rectified_size": [int(rectified.shape[1]), int(rectified.shape[0])],
         "processed_crop_size": [int(processed_crop.shape[1]), int(processed_crop.shape[0])],
         "yolo_imgsz": yolo_imgsz,
