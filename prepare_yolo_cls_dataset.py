@@ -244,7 +244,7 @@ def whole_rotate(image: Image.Image, rng: random.Random) -> Image.Image:
     angle = rng.choice([0, 90, 180, 270])
     if angle == 0:
         return image
-    return image.rotate(angle, expand=True)
+    return image.rotate(angle)
 
 
 def simulate_jpeg_compress(image: Image.Image, rng: random.Random, quality_range: tuple[int, int]) -> Image.Image:
@@ -333,34 +333,25 @@ def _find_perspective_coeffs(
 
 
 def _fill_background_white(image: Image.Image) -> Image.Image:
-    """将图像粘贴到纯白背景上，覆盖旋转/透视/裁切/模糊产生的非白色边缘区域。"""
+    """将图像粘贴到纯白背景上，覆盖旋转/透视产生的灰色边缘。"""
     bg = Image.new("RGB", image.size, (255, 255, 255))
     bg.paste(image, mask=image.split()[3] if image.mode == "RGBA" else None)
     return bg
 
 
-def preprocess_image(
-    source: Path,
-    rng: random.Random,
-    target_size: tuple[int, int],
-    enable_whole_rotation: bool = True,
-    jpeg_quality_range: tuple[int, int] = JPEG_QUALITY_RANGE,
-) -> Image.Image:
+def preprocess_image(source: Path, rng: random.Random, target_size: tuple[int, int]) -> Image.Image:
     """
     对单张图片执行完整预处理流程（数据增强）：
      1. 读取图片，根据 EXIF 方向信息自动旋转摆正，转为 RGB
      2. 随机小角度旋转（BILINEAR 插值）
-     3. 随机整体旋转 0/90/180/270 度（可通过 --no-whole-rotation 关闭）
-     4. 随机透视变换
-     5. 随机裁切（模拟构图变化）
-     6. 随机模糊
-     7. **将图像粘贴到纯白背景上**，确保底色一致，
-        后续颜色变换只作用于内容区域，白色背景不受影响
-     8. 随机调整亮度、对比度、饱和度
-     9. 随机锐化
-    10. 添加随机高斯噪声
-    11. 模拟 JPEG 压缩伪影
-    12. 缩放到统一目标尺寸
+     3. 随机整体旋转 0/90/180/270 度（由 ENABLE_WHOLE_ROTATION 常量控制，--no-whole-rotation 可覆盖）
+     4. 随机透视变换（设 PERSPECTIVE_H/V_ANGLE_RANGE=(0,0) 关闭）
+     5. 将图像粘贴到纯白背景上，覆盖旋转/透视产生的边缘
+     6. 随机裁切（模拟构图变化）
+     7. 随机调整亮度、对比度、饱和度、锐化
+     8. 添加随机高斯噪声、模糊
+     9. 模拟 JPEG 压缩伪影
+    10. 缩放到统一目标尺寸
     """
     with Image.open(source) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
@@ -370,21 +361,20 @@ def preprocess_image(
             expand=True,
             fillcolor=(255, 255, 255),
         )
-        if enable_whole_rotation:
+        if ENABLE_WHOLE_ROTATION:
             image = whole_rotate(image, rng)
         if PERSPECTIVE_H_ANGLE_RANGE != (0, 0) or PERSPECTIVE_V_ANGLE_RANGE != (0, 0):
             image = perspective_transform(image, rng, PERSPECTIVE_H_ANGLE_RANGE, PERSPECTIVE_V_ANGLE_RANGE)
-        image = random_crop(image, rng)
-        blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
-        image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
-        # 所有几何变换+模糊完成后填充纯白背景，保证底色一致，后续颜色变换不影响背景
         image = _fill_background_white(image)
+        image = random_crop(image, rng)
         image = ImageEnhance.Brightness(image).enhance(rng.uniform(*BRIGHTNESS_RANGE))
         image = ImageEnhance.Contrast(image).enhance(rng.uniform(*CONTRAST_RANGE))
         image = ImageEnhance.Color(image).enhance(rng.uniform(*SATURATION_RANGE))
         image = ImageEnhance.Sharpness(image).enhance(rng.uniform(*SHARPNESS_RANGE))
         image = add_noise(image, rng)
-        image = simulate_jpeg_compress(image, rng, jpeg_quality_range)
+        blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
+        image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
+        image = simulate_jpeg_compress(image, rng, JPEG_QUALITY_RANGE)
         return image.resize(target_size, Image.Resampling.LANCZOS)
 
 
@@ -399,25 +389,17 @@ def save_processed_image(image: Image.Image, target: Path) -> None:
     image.save(target, **save_kwargs)
 
 
-def preprocess_and_save(
-    source: Path,
-    target: Path,
-    rng: random.Random,
-    target_size: tuple[int, int],
-    aug_kwargs: dict | None = None,
-) -> None:
+def preprocess_and_save(source: Path, target: Path, rng: random.Random, target_size: tuple[int, int]) -> None:
     """对源图片执行预处理并保存到目标路径"""
     target.parent.mkdir(parents=True, exist_ok=True)
-    if aug_kwargs is None:
-        aug_kwargs = {}
-    processed_image = preprocess_image(source, rng, target_size, **aug_kwargs)
+    processed_image = preprocess_image(source, rng, target_size)
     save_processed_image(processed_image, target)
 
 
 def _process_one_job(job: tuple) -> None:
-    """多进程用的顶层任务函数：source, target, seed, target_size, aug_kwargs → 预处理+保存"""
-    source, target, seed, target_size, aug_kwargs = job
-    preprocess_and_save(source, target, random.Random(seed), target_size, aug_kwargs)
+    """多进程用的顶层任务函数：source, target, seed, target_size → 预处理+保存"""
+    source, target, seed, target_size = job
+    preprocess_and_save(source, target, random.Random(seed), target_size)
 
 
 def _build_jobs(
@@ -429,15 +411,12 @@ def _build_jobs(
     seed: int,
     aug_multiplier: int,
     target_size: tuple[int, int],
-    aug_kwargs: dict | None = None,
-) -> tuple[list[tuple], dict[str, dict[str, int]]]:
+    ) -> tuple[list[tuple], dict[str, dict[str, int]]]:
     """
     构建所有待处理任务，返回 (jobs, summary)。
-    job = (source, target, seed, target_size, aug_kwargs)
+    job = (source, target, seed, target_size)
     summary = {类别名: {split名: 数量}}
     """
-    if aug_kwargs is None:
-        aug_kwargs = {}
     jobs: list[tuple] = []
     summary: dict[str, dict[str, int]] = {}
     for class_index, (class_name, images) in enumerate(sorted(class_to_images.items())):
@@ -455,7 +434,7 @@ def _build_jobs(
                     else:
                         target_name = f"{image.stem}_aug{copy_idx:03d}{image.suffix}"
                     target_path = class_output_dir / target_name
-                    jobs.append((image, target_path, job_seed_base + job_idx, target_size, aug_kwargs))
+                    jobs.append((image, target_path, job_seed_base + job_idx, target_size))
                     job_idx += 1
             summary[class_name][split_name] = len(split_images_list) * multiplier
     return jobs, summary
@@ -470,7 +449,6 @@ def _build_augment_first_jobs(
     seed: int,
     aug_multiplier: int,
     target_size: tuple[int, int],
-    aug_kwargs: dict | None = None,
 ) -> tuple[list[tuple], dict[str, dict[str, int]]]:
     """
     先让每张原图生成 aug_multiplier 个增强版本，再把这些版本划分到 train/val/test。
@@ -478,8 +456,6 @@ def _build_augment_first_jobs(
     这样 train 会覆盖每一张原图的至少一个增强版本；代价是同一原图的不同增强版本
     可能同时出现在 train 和 val/test 中，验证指标会偏乐观。
     """
-    if aug_kwargs is None:
-        aug_kwargs = {}
     jobs: list[tuple] = []
     summary: dict[str, dict[str, int]] = {}
     copies = list(range(max(1, aug_multiplier)))
@@ -495,7 +471,7 @@ def _build_augment_first_jobs(
                 for job_idx, copy_idx in enumerate(copy_indices):
                     target_name = f"{image.stem}_aug{copy_idx:03d}{image.suffix}"
                     target_path = class_output_dir / target_name
-                    jobs.append((image, target_path, job_seed_base + copy_idx + job_idx, target_size, aug_kwargs))
+                    jobs.append((image, target_path, job_seed_base + copy_idx + job_idx, target_size))
                     summary[class_name][split_name] += 1
 
     return jobs, summary
@@ -513,8 +489,7 @@ def create_split_dataset(
     workers: int = 0,
     split_mode: str = "augment-first",
     target_size: tuple[int, int] = TARGET_SIZE,
-    aug_kwargs: dict | None = None,
-) -> dict[str, dict[str, int]]:
+    ) -> dict[str, dict[str, int]]:
     """
     创建划分后的数据集目录。
 
@@ -530,8 +505,6 @@ def create_split_dataset(
     使用多进程（ProcessPoolExecutor）并行处理，大幅加速批量生成。
     返回: {类别名: {split名: 图片数量}}
     """
-    if aug_kwargs is None:
-        aug_kwargs = {}
     if output_root.exists():
         if not overwrite:
             raise FileExistsError(f"Output directory already exists: {output_root}\nUse --overwrite to recreate it.")
@@ -546,12 +519,12 @@ def create_split_dataset(
     if split_mode == "augment-first":
         jobs, summary = _build_augment_first_jobs(
             class_to_images, output_root,
-            train_ratio, val_ratio, test_ratio, seed, aug_multiplier, target_size, aug_kwargs,
+            train_ratio, val_ratio, test_ratio, seed, aug_multiplier, target_size,
         )
     else:
         jobs, summary = _build_jobs(
             class_to_images, output_root,
-            train_ratio, val_ratio, test_ratio, seed, aug_multiplier, target_size, aug_kwargs,
+            train_ratio, val_ratio, test_ratio, seed, aug_multiplier, target_size,
         )
 
     total = len(jobs)
@@ -670,11 +643,9 @@ def main() -> None:
     output_root = resolve_path(args.output_root)
     class_to_images = discover_class_dirs(source_root, IMAGE_EXTS)
 
-    # 构建数据增强开关参数（传给 preprocess_image）
-    aug_kwargs = {
-        "enable_whole_rotation": not args.no_whole_rotation,
-        "jpeg_quality_range": tuple(args.jpeg_quality),
-    }
+    if args.no_whole_rotation:
+        global ENABLE_WHOLE_ROTATION
+        ENABLE_WHOLE_ROTATION = False
 
     split_counts = create_split_dataset(
         class_to_images=class_to_images,
@@ -688,7 +659,6 @@ def main() -> None:
         workers=args.workers,
         split_mode=args.split_mode,
         target_size=(args.target_size, args.target_size),
-        aug_kwargs=aug_kwargs,
     )
     write_summary(output_root, source_root, class_to_images, split_counts, args)
     print_summary(split_counts)
