@@ -8,7 +8,18 @@ from tkinter import ttk
 import cv2
 from PIL import Image, ImageTk
 
-from recognize_printed_marker_yolov8 import DEFAULT_MODEL, TemporalResultSmoother, draw_overlay, load_model, open_camera, recognize_frame
+from recognize_printed_marker_yolov8 import (
+    DEFAULT_MODEL,
+    DIRECTION_RESET_DEG_DEFAULT,
+    DIRECTION_STABLE_FRAMES_DEFAULT,
+    DirectionStabilizer,
+    NEAR_GEOMETRY_FIX_DEFAULT,
+    TemporalResultSmoother,
+    draw_overlay,
+    load_model,
+    open_camera,
+    recognize_frame,
+)
 
 
 CAMERA_CONTROL_PROPS = {
@@ -30,12 +41,13 @@ CONFIG_CONTROL_DEFAULTS = {
     "red_s_min": 80,
     "red_v_min": 50,
     "min_red_area": 80.0,
-    "morph_kernel": 5,
+    "morph_kernel": 3,
     "imgsz": 128,
     "crop_scale": 1.0,
     "crop_exposure": 1.0,
     "crop_contrast": 1.0,
     "crop_blur": 0.0,
+    "near_geometry_fix": NEAR_GEOMETRY_FIX_DEFAULT,
     "roi_top": 0.2,
     "roi_bottom": 0.78,
     "roi_left": 0.1,
@@ -50,6 +62,13 @@ INTEGER_CONTROL_NAMES = {
     "red_v_min",
     "morph_kernel",
     "imgsz",
+}
+FINE_CONTROL_NAMES = {
+    "near_geometry_fix",
+    "crop_scale",
+    "crop_exposure",
+    "crop_contrast",
+    "crop_blur",
 }
 
 
@@ -77,10 +96,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-red-area", type=float, default=80.0, help="Minimum red contour area in pixels.")
     parser.add_argument("--red-aspect-min", type=float, default=1.0, help="Minimum red rotated-rectangle aspect ratio.")
     parser.add_argument("--red-aspect-max", type=float, default=6.0, help="Maximum red rotated-rectangle aspect ratio.")
-    parser.add_argument("--morph-kernel", type=int, default=5, help="Morphology kernel size.")
+    parser.add_argument("--morph-kernel", type=int, default=3, help="Morphology kernel size.")
     parser.add_argument("--frame-skip", type=int, default=1, help="Classify every N frames.")
     parser.add_argument("--smooth-confirm-frames", type=int, default=2, help="Consecutive frames required before switching to a new recognized class.")
     parser.add_argument("--smooth-unknown-hold-frames", type=int, default=4, help="Consecutive unknown frames required before dropping a stable result to unknown.")
+    parser.add_argument("--direction-stable-frames", type=int, default=DIRECTION_STABLE_FRAMES_DEFAULT, help="Recent frame count used to stabilize marker direction.")
+    parser.add_argument("--direction-reset-deg", type=float, default=DIRECTION_RESET_DEG_DEFAULT, help="Reset direction history when heading jumps more than this many degrees.")
     parser.add_argument("--refresh-ms", type=int, default=30, help="GUI refresh interval in milliseconds.")
     parser.add_argument("--preview-width", type=int, default=640, help="Preview width in the GUI.")
     parser.add_argument("--crop-preview-width", type=int, default=320, help="Selected crop preview width in the GUI.")
@@ -88,6 +109,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crop-exposure", type=float, default=1.0, help="Postprocess selected image exposure before classification.")
     parser.add_argument("--crop-contrast", type=float, default=1.0, help="Postprocess selected image contrast before classification.")
     parser.add_argument("--crop-blur", type=float, default=0.0, help="Postprocess selected image Gaussian blur radius before classification.")
+    parser.add_argument(
+        "--near-geometry-fix",
+        type=float,
+        default=NEAR_GEOMETRY_FIX_DEFAULT,
+        help="Near-field geometry correction. Positive narrows width and stretches height; 0 disables it.",
+    )
     parser.add_argument("--roi-top", type=float, default=0.2, help="ROI top ratio (0-1).")
     parser.add_argument("--roi-bottom", type=float, default=0.78, help="ROI bottom ratio (0-1).")
     parser.add_argument("--roi-left", type=float, default=0.1, help="ROI left ratio (0-1).")
@@ -116,6 +143,7 @@ class RealtimeRecognizerApp:
         self.crop_image: ImageTk.PhotoImage | None = None
         self.last_result: dict | None = None
         self.smoother = TemporalResultSmoother(args.smooth_confirm_frames, args.smooth_unknown_hold_frames)
+        self.args.direction_stabilizer = DirectionStabilizer(args.direction_stable_frames, args.direction_reset_deg)
         self.last_tick = time.time()
         self.last_fps = 0.0
         self.frame_index = 0
@@ -214,6 +242,7 @@ class RealtimeRecognizerApp:
             ("roi_bottom", "ROI bottom", 0.0, 1.0, float(self.args.roi_bottom), False),
             ("roi_left", "ROI left", 0.0, 1.0, float(self.args.roi_left), False),
             ("roi_right", "ROI right", 0.0, 1.0, float(self.args.roi_right), False),
+            ("near_geometry_fix", "Near geom fix", -0.5, 0.6, float(self.args.near_geometry_fix), False),
         ]
 
         for row, (name, label, start, end, value, integer_only) in enumerate(control_specs):
@@ -314,6 +343,7 @@ class RealtimeRecognizerApp:
     def reset_recognition_cache(self) -> None:
         self.last_result = None
         self.smoother = TemporalResultSmoother(self.args.smooth_confirm_frames, self.args.smooth_unknown_hold_frames)
+        self.args.direction_stabilizer = DirectionStabilizer(self.args.direction_stable_frames, self.args.direction_reset_deg)
 
     def add_slider(
         self,
@@ -362,7 +392,12 @@ class RealtimeRecognizerApp:
             setattr(self.args, name, float(value))
 
     def update_control_label(self, name: str, value: float, integer_only: bool) -> None:
-        text = f"{int(round(value))}" if integer_only else f"{value:.1f}"
+        if integer_only:
+            text = f"{int(round(value))}"
+        elif name in FINE_CONTROL_NAMES:
+            text = f"{value:.2f}"
+        else:
+            text = f"{value:.1f}"
         self.control_value_labels[name].configure(text=text)
 
     def apply_camera_control(self, name: str) -> None:
@@ -383,6 +418,7 @@ class RealtimeRecognizerApp:
             return
         self.status_var.set("Camera started")
         self.smoother = TemporalResultSmoother(self.args.smooth_confirm_frames, self.args.smooth_unknown_hold_frames)
+        self.args.direction_stabilizer = DirectionStabilizer(self.args.direction_stable_frames, self.args.direction_reset_deg)
         self.last_tick = time.time()
         self.frame_index = 0
         self.update_frame()

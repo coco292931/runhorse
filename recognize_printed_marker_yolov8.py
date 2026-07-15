@@ -14,8 +14,35 @@ PAGE_WIDTH_CM = 12.0
 IMAGE_HEIGHT_CM = 12.0
 RED_HEIGHT_CM = 5.0
 PAGE_HEIGHT_CM = IMAGE_HEIGHT_CM + RED_HEIGHT_CM
-EXTEND_RATIO = IMAGE_HEIGHT_CM / RED_HEIGHT_CM
 YOLO_IMGSZ_MULTIPLE = 32
+NEAR_GEOMETRY_FIX_DEFAULT = 0.15
+DIRECTION_STABLE_FRAMES_DEFAULT = 4
+DIRECTION_RESET_DEG_DEFAULT = 35.0
+
+# Ground-plane calibration for the 320x240 runtime camera. Distances are
+# measured from the rear axle; inverse distance is nearly linear near horizon.
+CALIBRATION_WIDTH = 320.0
+CALIBRATION_HEIGHT = 240.0
+CALIBRATION_CENTER_X = CALIBRATION_WIDTH / 2.0
+CALIBRATION_HORIZON_Y = 34.0
+CALIBRATION_ROWS = np.array(
+    [CALIBRATION_HORIZON_Y, 44.0, 46.0, 50.0, 55.0, 66.0, 80.0, 85.0, 92.0, 100.0, 113.0, 132.0, 158.0, 190.0],
+    dtype=np.float64,
+)
+CALIBRATION_DISTANCES_CM = np.array(
+    [np.inf, 360.0, 300.0, 240.0, 180.0, 120.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0],
+    dtype=np.float64,
+)
+CALIBRATION_INV_DISTANCES = np.where(
+    np.isfinite(CALIBRATION_DISTANCES_CM),
+    1.0 / CALIBRATION_DISTANCES_CM,
+    0.0,
+)
+CAMERA_HEIGHT_CM = 28.0
+CAMERA_FORWARD_FROM_REAR_AXLE_CM = 15.0
+CAMERA_PITCH_RAD = np.deg2rad(45.0)
+CAMERA_HORIZONTAL_FOV_RAD = np.deg2rad(120.0)
+CAMERA_FOCAL_X = CALIBRATION_WIDTH / (2.0 * np.tan(CAMERA_HORIZONTAL_FOV_RAD / 2.0))
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,10 +73,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-red-area", type=float, default=80.0, help="Minimum red contour area in pixels.")
     parser.add_argument("--red-aspect-min", type=float, default=1.0, help="Minimum red rotated-rectangle aspect ratio.")
     parser.add_argument("--red-aspect-max", type=float, default=6.0, help="Maximum red rotated-rectangle aspect ratio.")
-    parser.add_argument("--morph-kernel", type=int, default=5, help="Morphology kernel size.")
+    parser.add_argument("--morph-kernel", type=int, default=3, help="Morphology kernel size.")
     parser.add_argument("--frame-skip", type=int, default=1, help="Classify every N webcam frames.")
     parser.add_argument("--smooth-confirm-frames", type=int, default=2, help="Consecutive frames required before switching to a new recognized class in realtime modes.")
     parser.add_argument("--smooth-unknown-hold-frames", type=int, default=4, help="Consecutive unknown frames required before dropping a stable realtime result to unknown.")
+    parser.add_argument("--direction-stable-frames", type=int, default=DIRECTION_STABLE_FRAMES_DEFAULT, help="Recent frame count used to stabilize marker direction in realtime modes.")
+    parser.add_argument("--direction-reset-deg", type=float, default=DIRECTION_RESET_DEG_DEFAULT, help="Reset direction history when heading jumps more than this many degrees.")
     parser.add_argument("--save-debug", action="store_true", help="Save mask, overlay, rectified image, and crop.")
     parser.add_argument("--show", action="store_true", help="Show OpenCV windows.")
     parser.add_argument("--no-save", action="store_true", help="Do not save outputs.")
@@ -57,6 +86,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crop-exposure", type=float, default=1.0, help="Postprocess selected image exposure before classification.")
     parser.add_argument("--crop-contrast", type=float, default=1.0, help="Postprocess selected image contrast before classification.")
     parser.add_argument("--crop-blur", type=float, default=0.0, help="Postprocess selected image Gaussian blur radius before classification.")
+    parser.add_argument(
+        "--near-geometry-fix",
+        type=float,
+        default=NEAR_GEOMETRY_FIX_DEFAULT,
+        help="Near-field geometry correction. Positive narrows width and stretches height; 0 disables it.",
+    )
     parser.add_argument("--roi-top", type=float, default=0.2, help="ROI top ratio (0-1, 0=top).")
     parser.add_argument("--roi-bottom", type=float, default=0.78, help="ROI bottom ratio (0-1, 1=bottom).")
     parser.add_argument("--roi-left", type=float, default=0.1, help="ROI left ratio (0-1, 0=left edge).")
@@ -130,6 +165,19 @@ def open_camera(args: argparse.Namespace) -> cv2.VideoCapture:
     raise RuntimeError(f"Unable to open camera {args.camera} with backends: {tried_text}")
 
 
+def roi_bounds(frame: np.ndarray, args: argparse.Namespace) -> tuple[int, int, int, int]:
+    height, width = frame.shape[:2]
+    y0 = int(round(float(args.roi_top) * height))
+    y1 = int(round(float(args.roi_bottom) * height))
+    x0 = int(round(float(args.roi_left) * width))
+    x1 = int(round(float(args.roi_right) * width))
+    y0 = max(0, min(height, y0))
+    y1 = max(y0, min(height, y1))
+    x0 = max(0, min(width, x0))
+    x1 = max(x0, min(width, x1))
+    return y0, y1, x0, x1
+
+
 def make_red_mask(frame: np.ndarray, args: argparse.Namespace) -> np.ndarray:
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     lower1 = np.array([args.red_h_low1, args.red_s_min, args.red_v_min], dtype=np.uint8)
@@ -139,13 +187,9 @@ def make_red_mask(frame: np.ndarray, args: argparse.Namespace) -> np.ndarray:
     mask = cv2.bitwise_or(cv2.inRange(hsv, lower1, upper1), cv2.inRange(hsv, lower2, upper2))
 
     # ROI：仅保留 [roi_left:roi_right, roi_top:roi_bottom] 区域内的红块
-    H, W = frame.shape[:2]
     if args.roi_top > 0.0 or args.roi_bottom < 1.0 or args.roi_left > 0.0 or args.roi_right < 1.0:
         roi_mask = np.zeros_like(mask)
-        y0 = int(round(args.roi_top * H))
-        y1 = int(round(args.roi_bottom * H))
-        x0 = int(round(args.roi_left * W))
-        x1 = int(round(args.roi_right * W))
+        y0, y1, x0, x1 = roi_bounds(frame, args)
         roi_mask[y0:y1, x0:x1] = 255
         mask = cv2.bitwise_and(mask, roi_mask)
 
@@ -183,11 +227,20 @@ def detect_red_patch(frame: np.ndarray, args: argparse.Namespace) -> dict[str, A
     mask = make_red_mask(frame, args)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    frame_height, _ = frame.shape[:2]
+    _, roi_y1, _, _ = roi_bounds(frame, args)
+    clipped_by_bottom = False
     best: dict[str, Any] | None = None
 
     for contour in contours:
         area = float(cv2.contourArea(contour))
         if area < args.min_red_area:
+            continue
+
+        x, y, w, h = cv2.boundingRect(contour)
+        bottom = y + h - 1
+        if (roi_y1 < frame_height and bottom >= roi_y1 - 2) or bottom >= frame_height - 2:
+            clipped_by_bottom = True
             continue
 
         rect = cv2.minAreaRect(contour)
@@ -216,32 +269,435 @@ def detect_red_patch(frame: np.ndarray, args: argparse.Namespace) -> dict[str, A
             "score": float(score),
             "center": [float(cx), float(cy)],
             "red_quad": quad,
+            "red_contour": contour.copy(),
         }
         if best is None or candidate["score"] > best["score"]:
             best = candidate
 
     if best is None:
-        return {"success": False, "error": "red_patch_not_found", "mask": mask}
+        error = "red_patch_clipped_by_bottom" if clipped_by_bottom else "red_patch_not_found"
+        return {"success": False, "error": error, "mask": mask}
 
     best["success"] = True
     best["mask"] = mask
     return best
 
 
-def estimate_page_quad_from_red(red_quad: np.ndarray) -> np.ndarray:
-    red_tl, red_tr, red_br, red_bl = red_quad.astype(np.float32)
-    page_tl = red_tl + (red_tl - red_bl) * EXTEND_RATIO
-    page_tr = red_tr + (red_tr - red_br) * EXTEND_RATIO
-    return np.array([page_tl, page_tr, red_br, red_bl], dtype=np.float32)
+def row_to_distance_cm(rows: np.ndarray, frame_height: int) -> np.ndarray:
+    calibration_rows = np.asarray(rows, dtype=np.float64) * CALIBRATION_HEIGHT / max(1, frame_height)
+    inverse_distance = np.interp(calibration_rows, CALIBRATION_ROWS, CALIBRATION_INV_DISTANCES)
+    distances = np.full(inverse_distance.shape, np.inf, dtype=np.float64)
+    valid = inverse_distance > 0.0
+    distances[valid] = 1.0 / inverse_distance[valid]
+    return distances
 
 
-def estimate_image_quad_from_red(red_quad: np.ndarray) -> np.ndarray:
-    red_tl, red_tr, red_br, red_bl = red_quad.astype(np.float32)
-    left_extend = (red_tl - red_bl) * EXTEND_RATIO
-    right_extend = (red_tr - red_br) * EXTEND_RATIO
-    image_tl = red_tl + left_extend
-    image_tr = red_tr + right_extend
-    return np.array([image_tl, image_tr, red_tr, red_tl], dtype=np.float32)
+def distance_to_row_px(distances_cm: np.ndarray, frame_height: int) -> np.ndarray:
+    distances = np.asarray(distances_cm, dtype=np.float64)
+    inverse_distance = np.zeros(distances.shape, dtype=np.float64)
+    valid = np.isfinite(distances) & (distances > 0.0)
+    inverse_distance[valid] = 1.0 / distances[valid]
+    calibration_rows = np.interp(inverse_distance, CALIBRATION_INV_DISTANCES, CALIBRATION_ROWS)
+    return calibration_rows * max(1, frame_height) / CALIBRATION_HEIGHT
+
+
+def camera_depth_cm(distances_from_rear_axle_cm: np.ndarray) -> np.ndarray:
+    forward_from_camera = np.asarray(distances_from_rear_axle_cm, dtype=np.float64) - CAMERA_FORWARD_FROM_REAR_AXLE_CM
+    return (
+        forward_from_camera * np.cos(CAMERA_PITCH_RAD)
+        + CAMERA_HEIGHT_CM * np.sin(CAMERA_PITCH_RAD)
+    )
+
+
+def image_points_to_ground(points: np.ndarray, frame_shape: tuple[int, ...]) -> np.ndarray:
+    height, width = frame_shape[:2]
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    calibration_x = pts[:, 0] * CALIBRATION_WIDTH / max(1, width)
+    distances = row_to_distance_cm(pts[:, 1], height)
+    depth = camera_depth_cm(distances)
+    lateral = (calibration_x - CALIBRATION_CENTER_X) * depth / CAMERA_FOCAL_X
+    return np.column_stack((lateral, distances))
+
+
+def ground_points_to_image(points: np.ndarray, frame_shape: tuple[int, ...]) -> np.ndarray:
+    height, width = frame_shape[:2]
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    lateral = pts[:, 0]
+    distances = pts[:, 1]
+    depth = camera_depth_cm(distances)
+    calibration_x = CALIBRATION_CENTER_X + CAMERA_FOCAL_X * lateral / depth
+    x = calibration_x * max(1, width) / CALIBRATION_WIDTH
+    y = distance_to_row_px(distances, height)
+    return np.column_stack((x, y)).astype(np.float32)
+
+
+def fit_image_width_edge(contour_points: np.ndarray, image_box: np.ndarray) -> np.ndarray:
+    points = np.asarray(contour_points, dtype=np.float64).reshape(-1, 2)
+    edge_a = image_box[1] - image_box[0]
+    edge_b = image_box[2] - image_box[1]
+    length_a = float(np.linalg.norm(edge_a))
+    length_b = float(np.linalg.norm(edge_b))
+    if min(length_a, length_b) <= 1e-6:
+        raise ValueError("red_patch_ground_fit_failed")
+
+    fallback = image_box[[0, 1]] if length_a >= length_b else image_box[[1, 2]]
+    if len(points) < 4:
+        return fallback
+
+    center = points.mean(axis=0)
+    centered = points - center
+    try:
+        covariance = np.cov(centered.T)
+        values, vectors = np.linalg.eigh(covariance)
+    except np.linalg.LinAlgError:
+        return fallback
+
+    axis = vectors[:, int(np.argmax(values))]
+    axis_length = float(np.linalg.norm(axis))
+    if axis_length <= 1e-6:
+        return fallback
+    axis /= axis_length
+    if axis[0] < 0.0:
+        axis = -axis
+
+    half_length = max(length_a, length_b) * 0.5
+    return np.array([center - axis * half_length, center + axis * half_length], dtype=np.float64)
+
+
+def estimate_track_forward_axis(frame: np.ndarray | None, center_image: np.ndarray, frame_shape: tuple[int, ...]) -> np.ndarray | None:
+    if frame is None:
+        return None
+
+    height, width = frame_shape[:2]
+    cx, cy = np.asarray(center_image, dtype=np.float64).reshape(2)
+    if not (0.0 <= cx < width and 0.0 <= cy < height):
+        return None
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    white_mask = ((hsv[:, :, 1] < 70) & (hsv[:, :, 2] > 115)).astype(np.uint8) * 255
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 3))
+    white_mask = cv2.morphologyEx(white_mask, cv2.MORPH_CLOSE, kernel)
+
+    y0 = max(0, int(round(cy - height * 0.16)))
+    y1 = min(height - 1, int(round(cy + height * 0.12)))
+    step = max(2, height // 120)
+    min_run_width = max(14, int(round(width * 0.04)))
+    max_center_jump = max(45.0, width * 0.18)
+    rows: list[float] = []
+    centers: list[float] = []
+
+    for y in range(y0, y1 + 1, step):
+        row = white_mask[y]
+        runs: list[tuple[int, int]] = []
+        start: int | None = None
+        for x, value in enumerate(row):
+            if value and start is None:
+                start = x
+            elif not value and start is not None:
+                if x - start >= min_run_width:
+                    runs.append((start, x - 1))
+                start = None
+        if start is not None and width - start >= min_run_width:
+            runs.append((start, width - 1))
+        if not runs:
+            continue
+
+        left_runs = [run for run in runs if run[1] < cx]
+        right_runs = [run for run in runs if run[0] > cx]
+        if left_runs and right_runs:
+            left_run = max(left_runs, key=lambda run: run[1])
+            right_run = min(right_runs, key=lambda run: run[0])
+            if right_run[0] - left_run[1] <= max(24.0, width * 0.18):
+                runs.append((left_run[0], right_run[1]))
+
+        def run_distance(run: tuple[int, int]) -> float:
+            left, right = run
+            if left <= cx <= right:
+                return 0.0
+            return min(abs(cx - left), abs(cx - right), abs(cx - (left + right) * 0.5))
+
+        left, right = min(runs, key=run_distance)
+        center = (left + right) * 0.5
+        if run_distance((left, right)) > max_center_jump:
+            continue
+        rows.append(float(y))
+        centers.append(float(center))
+
+    if len(rows) < 8 or max(rows) - min(rows) < height * 0.08:
+        return None
+
+    fit = np.polyfit(np.asarray(rows), np.asarray(centers), 1)
+    predicted = np.polyval(fit, np.asarray(rows))
+    residual = float(np.sqrt(np.mean((np.asarray(centers) - predicted) ** 2)))
+    if residual > width * 0.05:
+        return None
+
+    slope, intercept = float(fit[0]), float(fit[1])
+    mid_y = float(np.median(rows))
+    delta_y = max(18.0, (max(rows) - min(rows)) * 0.35)
+    near_y = min(height - 1.0, mid_y + delta_y)
+    far_y = max(0.0, mid_y - delta_y)
+    line_points = np.array(
+        [
+            [slope * near_y + intercept, near_y],
+            [slope * far_y + intercept, far_y],
+        ],
+        dtype=np.float64,
+    )
+    if not np.all((line_points[:, 0] >= 0.0) & (line_points[:, 0] < width)):
+        return None
+
+    ground = image_points_to_ground(line_points, frame_shape)
+    if not np.all(np.isfinite(ground)):
+        return None
+    axis = ground[1] - ground[0]
+    axis_length = float(np.linalg.norm(axis))
+    if axis_length <= 1e-6:
+        return None
+    axis /= axis_length
+    if axis[1] < 0.0:
+        axis = -axis
+    return axis
+
+
+def near_geometry_scales(red_distance_cm: float, args: argparse.Namespace | None) -> tuple[float, float, float]:
+    correction = float(getattr(args, "near_geometry_fix", NEAR_GEOMETRY_FIX_DEFAULT))
+    correction = float(np.clip(correction, -0.5, 0.6))
+    weight = float(np.clip((90.0 - red_distance_cm) / 70.0, 0.0, 1.0))
+    applied = correction * weight
+    width_scale = float(np.clip(1.0 - 0.5 * applied, 0.65, 1.35))
+    height_scale = float(np.clip(1.0 + applied, 0.65, 1.65))
+    return width_scale, height_scale, applied
+
+
+def perpendicular_width_axis(forward_axis: np.ndarray) -> np.ndarray:
+    axis = np.array([forward_axis[1], -forward_axis[0]], dtype=np.float64)
+    length = float(np.linalg.norm(axis))
+    if length <= 1e-6:
+        return np.array([1.0, 0.0], dtype=np.float64)
+    axis /= length
+    if axis[0] < 0.0:
+        axis = -axis
+    return axis
+
+
+def enforce_image_above_red(
+    forward_axis: np.ndarray,
+    red_center: np.ndarray,
+    red_center_image: np.ndarray,
+    red_height_cm: float,
+    image_height_cm: float,
+    frame_shape: tuple[int, ...],
+) -> tuple[np.ndarray, np.ndarray, bool, float]:
+    red_y = float(np.asarray(red_center_image, dtype=np.float64).reshape(2)[1])
+    image_center_offset = red_height_cm * 0.5 + image_height_cm * 0.5
+
+    def projected_image_center_y(axis: np.ndarray) -> float:
+        image_center_ground = red_center + axis * image_center_offset
+        image_center = ground_points_to_image(image_center_ground.reshape(1, 2), frame_shape)[0]
+        return float(image_center[1])
+
+    current_y = projected_image_center_y(forward_axis)
+    flipped_axis = -forward_axis
+    flipped_y = projected_image_center_y(flipped_axis)
+    if np.isfinite(flipped_y) and (not np.isfinite(current_y) or (current_y >= red_y - 0.5 and flipped_y < current_y)):
+        return flipped_axis, perpendicular_width_axis(flipped_axis), True, flipped_y
+    return forward_axis, perpendicular_width_axis(forward_axis), False, current_y
+
+
+class DirectionStabilizer:
+    def __init__(
+        self,
+        max_frames: int = DIRECTION_STABLE_FRAMES_DEFAULT,
+        reset_degrees: float = DIRECTION_RESET_DEG_DEFAULT,
+    ) -> None:
+        self.max_frames = max(1, int(max_frames))
+        self.reset_degrees = max(1.0, float(reset_degrees))
+        self.history: list[np.ndarray] = []
+
+    def reset(self) -> None:
+        self.history.clear()
+
+    def apply(self, forward_axis: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+        axis = self._normalize_axis(forward_axis)
+        previous = self._weighted_mean() if self.history else None
+        delta_degrees = 0.0
+        reset = False
+
+        if previous is not None:
+            delta_degrees = self._angle_between_degrees(previous, axis)
+            if delta_degrees > self.reset_degrees:
+                self.history = [axis]
+                reset = True
+                return axis, {
+                    "direction_stabilized": False,
+                    "direction_history": len(self.history),
+                    "direction_delta_deg": delta_degrees,
+                    "direction_reset": reset,
+                }
+
+        self.history.append(axis)
+        if len(self.history) > self.max_frames:
+            self.history = self.history[-self.max_frames:]
+
+        stabilized = self._weighted_mean()
+        return stabilized, {
+            "direction_stabilized": len(self.history) > 1,
+            "direction_history": len(self.history),
+            "direction_delta_deg": delta_degrees,
+            "direction_reset": reset,
+        }
+
+    @staticmethod
+    def _normalize_axis(axis: np.ndarray) -> np.ndarray:
+        normalized = np.asarray(axis, dtype=np.float64).reshape(2)
+        length = float(np.linalg.norm(normalized))
+        if length <= 1e-6:
+            normalized = np.array([0.0, 1.0], dtype=np.float64)
+        else:
+            normalized = normalized / length
+        if normalized[1] < 0.0:
+            normalized = -normalized
+        return normalized
+
+    @staticmethod
+    def _angle_between_degrees(a: np.ndarray, b: np.ndarray) -> float:
+        dot = float(np.clip(np.dot(a, b), -1.0, 1.0))
+        return float(np.degrees(np.arccos(dot)))
+
+    def _weighted_mean(self) -> np.ndarray:
+        if not self.history:
+            return np.array([0.0, 1.0], dtype=np.float64)
+        weights = np.arange(1, len(self.history) + 1, dtype=np.float64)
+        vector = np.sum(np.vstack(self.history) * weights[:, None], axis=0)
+        return self._normalize_axis(vector)
+
+
+def estimate_marker_geometry(
+    red_contour: np.ndarray,
+    frame_shape: tuple[int, ...],
+    args: argparse.Namespace | None = None,
+    frame: np.ndarray | None = None,
+) -> dict[str, Any]:
+    contour_points = np.asarray(red_contour, dtype=np.float32).reshape(-1, 2)
+    ground_points = image_points_to_ground(contour_points, frame_shape)
+    ground_points = ground_points[np.all(np.isfinite(ground_points), axis=1)]
+    if len(ground_points) < 4:
+        raise ValueError("red_patch_outside_ground_calibration")
+
+    image_rect = cv2.minAreaRect(contour_points.reshape(-1, 1, 2))
+    image_box = cv2.boxPoints(image_rect).astype(np.float64)
+    width_edge_image = fit_image_width_edge(contour_points, image_box)
+    width_edge_ground = image_points_to_ground(width_edge_image, frame_shape)
+    if not np.all(np.isfinite(width_edge_ground)):
+        raise ValueError("red_patch_outside_ground_calibration")
+    width_axis = width_edge_ground[1] - width_edge_ground[0]
+    width_axis_length = float(np.linalg.norm(width_axis))
+    if width_axis_length <= 1e-6:
+        raise ValueError("red_patch_ground_fit_failed")
+    width_axis /= width_axis_length
+    if width_axis[0] < 0.0:
+        width_axis = -width_axis
+    forward_axis = np.array([-width_axis[1], width_axis[0]], dtype=np.float64)
+    if forward_axis[1] < 0.0:
+        forward_axis = -forward_axis
+
+    moments = cv2.moments(contour_points.reshape(-1, 1, 2))
+    if abs(moments["m00"]) > 1e-6:
+        center_image = np.array(
+            [[moments["m10"] / moments["m00"], moments["m01"] / moments["m00"]]],
+            dtype=np.float64,
+        )
+    else:
+        center_image = np.array([image_rect[0]], dtype=np.float64)
+    red_center = image_points_to_ground(center_image, frame_shape)[0]
+    if not np.all(np.isfinite(red_center)):
+        raise ValueError("red_patch_outside_ground_calibration")
+
+    width_scale, height_scale, applied_near_fix = near_geometry_scales(float(red_center[1]), args)
+    red_height_cm = RED_HEIGHT_CM * height_scale
+    image_height_cm = IMAGE_HEIGHT_CM * height_scale
+    half_width = PAGE_WIDTH_CM * 0.5 * width_scale
+
+    route_axis_used = False
+    route_axis_anchor = "disabled"
+    # 赛道切线方向修正先保留代码但关闭入口，避免近处框选被不稳定拟合带偏。
+    # page_center_ground = red_center + forward_axis * (image_height_cm * 0.5)
+    # page_center_image = ground_points_to_image(page_center_ground.reshape(1, 2), frame_shape)[0]
+    # route_forward_axis = estimate_track_forward_axis(frame, page_center_image, frame_shape)
+    # if route_forward_axis is not None and page_center_ground[1] <= 120.0:
+    #     alignment = abs(float(np.dot(route_forward_axis, forward_axis)))
+    #     if alignment >= 0.45:
+    #         forward_axis = route_forward_axis
+    #         width_axis = np.array([forward_axis[1], -forward_axis[0]], dtype=np.float64)
+    #         width_axis /= max(float(np.linalg.norm(width_axis)), 1e-6)
+    #         if width_axis[0] < 0.0:
+    #             width_axis = -width_axis
+    #         route_axis_used = True
+    #         route_axis_anchor = "page_center"
+
+    direction_info: dict[str, Any] = {
+        "direction_stabilized": False,
+        "direction_history": 0,
+        "direction_delta_deg": 0.0,
+        "direction_reset": False,
+    }
+    direction_stabilizer = getattr(args, "direction_stabilizer", None)
+    if direction_stabilizer is not None:
+        forward_axis, direction_info = direction_stabilizer.apply(forward_axis)
+        width_axis = perpendicular_width_axis(forward_axis)
+
+    forward_projection = ground_points @ forward_axis
+    width_projection = ground_points @ width_axis
+    observed_width = float(np.percentile(width_projection, 95.0) - np.percentile(width_projection, 5.0))
+    observed_height = float(np.percentile(forward_projection, 95.0) - np.percentile(forward_projection, 5.0))
+    red_near_center = red_center - forward_axis * (red_height_cm * 0.5)
+    red_far_center = red_center + forward_axis * (red_height_cm * 0.5)
+    image_far_center = red_far_center + forward_axis * image_height_cm
+
+    red_ground = np.array(
+        [
+            red_far_center - width_axis * half_width,
+            red_far_center + width_axis * half_width,
+            red_near_center + width_axis * half_width,
+            red_near_center - width_axis * half_width,
+        ],
+        dtype=np.float64,
+    )
+    image_ground = np.array(
+        [
+            image_far_center - width_axis * half_width,
+            image_far_center + width_axis * half_width,
+            red_far_center + width_axis * half_width,
+            red_far_center - width_axis * half_width,
+        ],
+        dtype=np.float64,
+    )
+    page_ground = np.array(
+        [
+            image_far_center - width_axis * half_width,
+            image_far_center + width_axis * half_width,
+            red_near_center + width_axis * half_width,
+            red_near_center - width_axis * half_width,
+        ],
+        dtype=np.float64,
+    )
+
+    return {
+        "red_quad": ground_points_to_image(red_ground, frame_shape),
+        "image_quad": ground_points_to_image(image_ground, frame_shape),
+        "page_quad": ground_points_to_image(page_ground, frame_shape),
+        "near_distance_cm": float(red_near_center[1]),
+        "heading_deg": float(np.degrees(np.arctan2(forward_axis[0], forward_axis[1]))),
+        "observed_width_cm": observed_width,
+        "observed_height_cm": observed_height,
+        "near_geometry_fix_applied": applied_near_fix,
+        "geometry_width_scale": width_scale,
+        "geometry_height_scale": height_scale,
+        "route_axis_used": route_axis_used,
+        "route_axis_anchor": route_axis_anchor,
+        **direction_info,
+    }
 
 
 def warp_page(frame: np.ndarray, page_quad: np.ndarray, output_width: int) -> np.ndarray:
@@ -411,18 +867,21 @@ def recognize_frame(frame: np.ndarray, model, args: argparse.Namespace) -> tuple
 
 
 def _make_roi_dict(frame: np.ndarray, args: argparse.Namespace) -> dict[str, int]:
-    H, W = frame.shape[:2]
+    y0, y1, x0, x1 = roi_bounds(frame, args)
     return {
-        "y0": int(round(args.roi_top * H)),
-        "y1": int(round(args.roi_bottom * H)),
-        "x0": int(round(args.roi_left * W)),
-        "x1": int(round(args.roi_right * W)),
+        "y0": y0,
+        "y1": y1,
+        "x0": x0,
+        "x1": x1,
     }
 
 
 def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[str, Any]:
     detected = detect_red_patch(frame, args)
     if not detected["success"]:
+        direction_stabilizer = getattr(args, "direction_stabilizer", None)
+        if direction_stabilizer is not None:
+            direction_stabilizer.reset()
         return {"success": False, "error": detected["error"], "mask": detected["mask"], "roi": _make_roi_dict(frame, args)}
 
     raw_imgsz = int(round(args.imgsz))
@@ -431,9 +890,20 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
         print(f"YOLO imgsz adjusted: {raw_imgsz} -> {yolo_imgsz} ({YOLO_IMGSZ_MULTIPLE}x multiple)")
         args.imgsz = yolo_imgsz
 
-    red_quad = detected["red_quad"]
-    image_quad = estimate_image_quad_from_red(red_quad)
-    page_quad = estimate_page_quad_from_red(red_quad)
+    try:
+        geometry = estimate_marker_geometry(detected["red_contour"], frame.shape, args, frame=frame)
+    except ValueError as exc:
+        return {
+            "success": False,
+            "error": str(exc),
+            "mask": detected["mask"],
+            "red_quad": quad_to_list(detected["red_quad"]),
+            "roi": _make_roi_dict(frame, args),
+        }
+
+    red_quad = geometry["red_quad"]
+    image_quad = geometry["image_quad"]
+    page_quad = geometry["page_quad"]
     processed_crop = apply_crop_postprocess(warp_image_area(frame, image_quad, args.output_width), args)
     crop = resize_for_yolo_input(processed_crop, yolo_imgsz)
     rectified = warp_page(frame, page_quad, args.output_width)
@@ -456,6 +926,20 @@ def process_frame(frame: np.ndarray, model, args: argparse.Namespace) -> dict[st
         "red_area": detected["area"],
         "red_aspect": detected["aspect"],
         "red_fill_ratio": detected["fill_ratio"],
+        "geometry_mode": "ground_calibrated",
+        "marker_near_distance_cm": round(geometry["near_distance_cm"], 2),
+        "marker_heading_deg": round(geometry["heading_deg"], 2),
+        "observed_red_width_cm": round(geometry["observed_width_cm"], 2),
+        "observed_red_height_cm": round(geometry["observed_height_cm"], 2),
+        "near_geometry_fix_applied": round(geometry["near_geometry_fix_applied"], 3),
+        "geometry_width_scale": round(geometry["geometry_width_scale"], 3),
+        "geometry_height_scale": round(geometry["geometry_height_scale"], 3),
+        "route_axis_used": bool(geometry["route_axis_used"]),
+        "route_axis_anchor": geometry["route_axis_anchor"],
+        "direction_stabilized": bool(geometry["direction_stabilized"]),
+        "direction_history": int(geometry["direction_history"]),
+        "direction_delta_deg": round(geometry["direction_delta_deg"], 2),
+        "direction_reset": bool(geometry["direction_reset"]),
         "rectified_size": [int(rectified.shape[1]), int(rectified.shape[0])],
         "processed_crop_size": [int(processed_crop.shape[1]), int(processed_crop.shape[0])],
         "yolo_imgsz": yolo_imgsz,
@@ -617,6 +1101,7 @@ def run_webcam(args: argparse.Namespace) -> None:
     model = load_model(args.model)
     capture = open_camera(args)
     smoother = TemporalResultSmoother(args.smooth_confirm_frames, args.smooth_unknown_hold_frames)
+    args.direction_stabilizer = DirectionStabilizer(args.direction_stable_frames, args.direction_reset_deg)
 
     run_dir = args.save_dir.expanduser().resolve() / f"{args.mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     snapshot_dir = run_dir / "snapshots"
