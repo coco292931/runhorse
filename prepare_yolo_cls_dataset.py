@@ -36,18 +36,21 @@ TARGET_SIZE = (128, 128)
 
 # 数据增强参数
 ROTATION_RANGE = (-10.0, 10.0)       # 随机旋转角度范围（度）
-CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
-TRANSLATION_RATIO = 0.03              # 随机平移比例（相对原图尺寸）
-BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
-CONTRAST_RANGE = (0.6, 2.0)           # 对比度调整范围（>1 增强对比）
-NOISE_AMOUNT_RANGE = (80, 240)          # 高斯噪声强度范围
-BLUR_RADIUS_RANGE = (20, 50)          # 高斯模糊半径范围（像素）
-SATURATION_RANGE = (0.4, 0.8)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
-SHARPNESS_RANGE = (0.8, 2.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
-JPEG_QUALITY_RANGE = (20, 50)         # JPEG 压缩质量范围（模拟传输压缩损失）
+ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
 PERSPECTIVE_H_ANGLE_RANGE = (-8,8)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
 PERSPECTIVE_V_ANGLE_RANGE = (-15.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
-ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
+CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
+TRANSLATION_RATIO = 0.03              # 随机平移比例（相对原图尺寸）
+
+BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
+CONTRAST_RANGE = (0.8, 2.0)           # 对比度调整范围（>1 增强对比）
+SATURATION_RANGE = (0.5, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
+
+SHARPNESS_RANGE = (0.8, 5.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
+BLUR_RADIUS_RANGE = (20, 30)          # 高斯模糊半径范围（像素）
+NOISE_AMOUNT_RANGE = (20, 80)          # 高斯噪声强度范围
+COLOR_NOISE_STD_RANGE = (80.0, 200.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
+JPEG_QUALITY_RANGE = (15, 40)         # JPEG 压缩质量范围（模拟传输压缩损失）
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jpeg-quality", type=int, nargs=2, default=list(JPEG_QUALITY_RANGE),
                         metavar=("LOW", "HIGH"),
                         help="JPEG 压缩质量范围（模拟传输压缩损失），low>=100 时跳过该步骤，例如 --jpeg-quality 40 95")
-    parser.add_argument("--no-whole-rotation", action="store_true",
+    parser.add_argument("--no-whole-rotation", action="store_true", default=not ENABLE_WHOLE_ROTATION,
                         help="禁用整体旋转增强（0/90/180/270 度）")
     return parser.parse_args()
 
@@ -214,8 +217,9 @@ def clamp(value: int, minimum: int, maximum: int) -> int:
 def random_crop(image: Image.Image, rng: random.Random) -> Image.Image:
     """
     随机裁切：在缩放+微小平移后裁切图片。
-    - 裁切尺寸在原图的 90%-110% 之间随机
+    - 裁切尺寸在原图的 80%-120% 之间随机
     - 裁切中心在原中心附近随机平移 ±3%
+    - 裁切框超出原图时，用纯白背景补齐
     """
     width, height = image.size
     crop_scale = rng.uniform(*CROP_SCALE_RANGE)
@@ -227,9 +231,21 @@ def random_crop(image: Image.Image, rng: random.Random) -> Image.Image:
     center_x = width // 2 + rng.randint(-max_shift_x, max_shift_x)
     center_y = height // 2 + rng.randint(-max_shift_y, max_shift_y)
 
-    left = clamp(center_x - crop_width // 2, 0, width - crop_width)
-    top = clamp(center_y - crop_height // 2, 0, height - crop_height)
-    return image.crop((left, top, left + crop_width, top + crop_height))
+    left = center_x - crop_width // 2
+    top = center_y - crop_height // 2
+    right = left + crop_width
+    bottom = top + crop_height
+
+    crop = Image.new("RGB", (crop_width, crop_height), (255, 255, 255))
+    src_left = clamp(left, 0, width)
+    src_top = clamp(top, 0, height)
+    src_right = clamp(right, 0, width)
+    src_bottom = clamp(bottom, 0, height)
+
+    if src_right > src_left and src_bottom > src_top:
+        cropped_region = image.crop((src_left, src_top, src_right, src_bottom))
+        crop.paste(cropped_region, (src_left - left, src_top - top))
+    return crop
 
 
 def add_noise(image: Image.Image, rng: random.Random) -> Image.Image:
@@ -237,6 +253,18 @@ def add_noise(image: Image.Image, rng: random.Random) -> Image.Image:
     noise_amount = rng.randint(*NOISE_AMOUNT_RANGE)
     noise = Image.effect_noise(image.size, noise_amount).convert("L")
     return Image.blend(image, Image.merge("RGB", (noise, noise, noise)), 0.18)
+
+
+def add_color_noise(image: Image.Image, rng: random.Random) -> Image.Image:
+    """添加三通道加性彩色噪声，避免把图像整体混合成灰色"""
+    import numpy as np
+
+    noise_std = rng.uniform(*COLOR_NOISE_STD_RANGE)
+    np_rng = np.random.default_rng(rng.randrange(2**32))
+    pixels = np.asarray(image, dtype=np.int16)
+    noise = np_rng.normal(0.0, noise_std, pixels.shape)
+    noisy_pixels = np.clip(pixels + noise, 0, 255).astype(np.uint8)
+    return Image.fromarray(noisy_pixels, mode="RGB")
 
 
 def whole_rotate(image: Image.Image, rng: random.Random) -> Image.Image:
@@ -304,7 +332,7 @@ def perspective_transform(
     coeffs = _find_perspective_coeffs(corners, dst, cx, cy)
     return image.transform(
         image.size, Image.Transform.PERSPECTIVE, coeffs,
-        resample=Image.Resampling.BILINEAR, fillcolor=(128, 128, 128),
+        resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255),
     )
 
 
@@ -346,12 +374,13 @@ def preprocess_image(
      3. 随机整体旋转 0/90/180/270 度（可通过 --no-whole-rotation 关闭）
      4. 随机透视变换（设 PERSPECTIVE_DISTORTION=0 关闭）
      5. 随机裁切（模拟构图变化）
-     6. 随机调整亮度、对比度、饱和度（设 SATURATION_RANGE=(1,1) 关闭）
-     7. 随机锐化（设 SHARPNESS_RANGE=(1,1) 关闭）
-     8. 添加随机高斯噪声
+     6. 用纯白背景填充几何变换产生的空白区域
+     7. 随机调整亮度、对比度、饱和度（设 SATURATION_RANGE=(1,1) 关闭）
+     8. 随机锐化（设 SHARPNESS_RANGE=(1,1) 关闭）
      9. 随机模糊
-    10. 模拟 JPEG 压缩伪影（设 --jpeg-quality 100 100 关闭）
-    11. 缩放到统一目标尺寸
+    10. 添加随机高斯噪声和彩色噪声
+    11. 模拟 JPEG 压缩伪影（设 --jpeg-quality 100 100 关闭）
+    12. 缩放到统一目标尺寸
     """
     with Image.open(source) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
@@ -359,7 +388,7 @@ def preprocess_image(
             rng.uniform(*ROTATION_RANGE),
             resample=Image.Resampling.BILINEAR,
             expand=True,
-            fillcolor=(128, 128, 128),
+            fillcolor=(255, 255, 255),
         )
         if enable_whole_rotation:
             image = whole_rotate(image, rng)
@@ -370,9 +399,10 @@ def preprocess_image(
         image = ImageEnhance.Contrast(image).enhance(rng.uniform(*CONTRAST_RANGE))
         image = ImageEnhance.Color(image).enhance(rng.uniform(*SATURATION_RANGE))
         image = ImageEnhance.Sharpness(image).enhance(rng.uniform(*SHARPNESS_RANGE))
-        image = add_noise(image, rng)
         blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
         image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
+        image = add_noise(image, rng)
+        image = add_color_noise(image, rng)
         image = simulate_jpeg_compress(image, rng, jpeg_quality_range)
         return image.resize(target_size, Image.Resampling.LANCZOS)
 
@@ -597,20 +627,21 @@ def write_summary(
             "applied_splits": ["train", "val", "test"],
             "output_size": [args.target_size, args.target_size],
             "rotation_range_degrees": list(ROTATION_RANGE),
+            "enabled": {
+                "whole_rotation": not args.no_whole_rotation,
+            },
+            "perspective_h_angle_range_degrees": list(PERSPECTIVE_H_ANGLE_RANGE),
+            "perspective_v_angle_range_degrees": list(PERSPECTIVE_V_ANGLE_RANGE),
             "crop_scale_range": list(CROP_SCALE_RANGE),
             "translation_ratio": TRANSLATION_RATIO,
             "brightness_range": list(BRIGHTNESS_RANGE),
             "contrast_range": list(CONTRAST_RANGE),
             "saturation_range": list(SATURATION_RANGE),
             "sharpness_range": list(SHARPNESS_RANGE),
-            "noise_amount_range": list(NOISE_AMOUNT_RANGE),
             "blur_radius_range": list(BLUR_RADIUS_RANGE),
+            "noise_amount_range": list(NOISE_AMOUNT_RANGE),
+            "color_noise_std_range": list(COLOR_NOISE_STD_RANGE),
             "jpeg_quality_range": list(JPEG_QUALITY_RANGE),
-            "perspective_h_angle_range_degrees": list(PERSPECTIVE_H_ANGLE_RANGE),
-            "perspective_v_angle_range_degrees": list(PERSPECTIVE_V_ANGLE_RANGE),
-            "enabled": {
-                "whole_rotation": not args.no_whole_rotation,
-            },
         },
         "classes": [
             {
