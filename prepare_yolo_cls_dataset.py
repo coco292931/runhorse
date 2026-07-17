@@ -40,17 +40,17 @@ ROTATION_RANGE = (-15.0, 15.0)       # 随机旋转角度范围（度）
 GEOMETRY_ANCHOR_RATIO = (0.5, 1.0)   # 几何变换锚点比例：下底边中点
 PERSPECTIVE_H_ANGLE_RANGE = (-4,4)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
 PERSPECTIVE_V_ANGLE_RANGE = (-4.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
-CROP_SCALE_RANGE = (0.8, 1.3)         # 随机裁切缩放比例
-TRANSLATION_RATIO = 0.05              # 随机平移比例（相对原图尺寸）
+CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
+TRANSLATION_RATIO = 0.04              # 随机平移比例（相对原图尺寸）
 
 BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
-CONTRAST_RANGE = (1, 3.0)           # 对比度调整范围（>1 增强对比）
-SATURATION_RANGE = (0.6, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
+CONTRAST_RANGE = (0.8, 2.5)           # 对比度调整范围（>1 增强对比）
+SATURATION_RANGE = (0.65, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
 
-SHARPNESS_RANGE = (0.8, 2.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
-BLUR_RADIUS_RANGE = (20, 30)          # 高斯模糊半径范围（像素）
-NOISE_AMOUNT_RANGE = (20, 50)          # 高斯噪声强度范围
-COLOR_NOISE_STD_RANGE = (40.0, 80.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
+SHARPNESS_RANGE = (0.8, 3.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
+BLUR_RADIUS_RANGE = (5, 10)          # 高斯模糊半径范围（像素）
+NOISE_AMOUNT_RANGE = (10, 40)          # 高斯噪声强度范围
+COLOR_NOISE_STD_RANGE = (40.0, 60.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
 JPEG_QUALITY_RANGE = (5, 20)         # JPEG 压缩质量范围（模拟传输压缩损失）
 
 
