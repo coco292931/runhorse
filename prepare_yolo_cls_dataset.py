@@ -32,25 +32,26 @@ EXCLUDED_DIRS = {
 }
 
 # 输出图片统一尺寸（宽, 高），单位像素
-TARGET_SIZE = (128, 128)
+TARGET_SIZE = (32,32)
+ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
 
 # 数据增强参数
-ROTATION_RANGE = (-10.0, 10.0)       # 随机旋转角度范围（度）
-ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
-PERSPECTIVE_H_ANGLE_RANGE = (-8,8)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
-PERSPECTIVE_V_ANGLE_RANGE = (-15.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
-CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
-TRANSLATION_RATIO = 0.03              # 随机平移比例（相对原图尺寸）
+ROTATION_RANGE = (-15.0, 15.0)       # 随机旋转角度范围（度）
+GEOMETRY_ANCHOR_RATIO = (0.5, 1.0)   # 几何变换锚点比例：下底边中点
+PERSPECTIVE_H_ANGLE_RANGE = (-4,4)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
+PERSPECTIVE_V_ANGLE_RANGE = (-4.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
+CROP_SCALE_RANGE = (0.8, 1.3)         # 随机裁切缩放比例
+TRANSLATION_RATIO = 0.05              # 随机平移比例（相对原图尺寸）
 
 BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
-CONTRAST_RANGE = (0.8, 2.0)           # 对比度调整范围（>1 增强对比）
-SATURATION_RANGE = (0.5, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
+CONTRAST_RANGE = (1, 3.0)           # 对比度调整范围（>1 增强对比）
+SATURATION_RANGE = (0.6, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
 
-SHARPNESS_RANGE = (0.8, 5.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
+SHARPNESS_RANGE = (0.8, 2.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
 BLUR_RADIUS_RANGE = (20, 30)          # 高斯模糊半径范围（像素）
-NOISE_AMOUNT_RANGE = (20, 80)          # 高斯噪声强度范围
-COLOR_NOISE_STD_RANGE = (80.0, 200.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
-JPEG_QUALITY_RANGE = (15, 40)         # JPEG 压缩质量范围（模拟传输压缩损失）
+NOISE_AMOUNT_RANGE = (20, 50)          # 高斯噪声强度范围
+COLOR_NOISE_STD_RANGE = (40.0, 80.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
+JPEG_QUALITY_RANGE = (5, 20)         # JPEG 压缩质量范围（模拟传输压缩损失）
 
 
 def parse_args() -> argparse.Namespace:
@@ -214,15 +215,35 @@ def clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(value, maximum))
 
 
+def geometry_anchor(image: Image.Image) -> tuple[float, float]:
+    """返回几何变换锚点：默认下底边中点"""
+    width, height = image.size
+    return width * GEOMETRY_ANCHOR_RATIO[0], height * GEOMETRY_ANCHOR_RATIO[1]
+
+
 def random_crop(image: Image.Image, rng: random.Random) -> Image.Image:
     """
     随机裁切：在缩放+微小平移后裁切图片。
-    - 裁切尺寸在原图的 80%-120% 之间随机
-    - 裁切中心在原中心附近随机平移 ±3%
-    - 裁切框超出原图时，用纯白背景补齐
+    - crop_scale <= 1 时裁切后放大，裁切中心仍在原中心附近随机平移 ±3%
+    - crop_scale > 1 时缩小后贴回原画布，以下底边中点为缩放锚点
     """
     width, height = image.size
     crop_scale = rng.uniform(*CROP_SCALE_RANGE)
+
+    if crop_scale > 1.0:
+        scaled_width = max(1, int(round(width / crop_scale)))
+        scaled_height = max(1, int(round(height / crop_scale)))
+        scaled_image = image.resize((scaled_width, scaled_height), Image.Resampling.LANCZOS)
+
+        anchor_x = int(round(width * GEOMETRY_ANCHOR_RATIO[0]))
+        anchor_y = int(round(height * GEOMETRY_ANCHOR_RATIO[1]))
+        scaled_anchor_x = int(round(scaled_width * GEOMETRY_ANCHOR_RATIO[0]))
+        scaled_anchor_y = int(round(scaled_height * GEOMETRY_ANCHOR_RATIO[1]))
+
+        canvas = Image.new("RGB", (width, height), (255, 255, 255))
+        canvas.paste(scaled_image, (anchor_x - scaled_anchor_x, anchor_y - scaled_anchor_y))
+        return canvas
+
     crop_width = max(1, int(round(width * crop_scale)))
     crop_height = max(1, int(round(height * crop_scale)))
 
@@ -370,8 +391,8 @@ def preprocess_image(
     """
     对单张图片执行完整预处理流程（数据增强）：
      1. 读取图片，根据 EXIF 方向信息自动旋转摆正，转为 RGB
-     2. 随机小角度旋转（BILINEAR 插值）
-     3. 随机整体旋转 0/90/180/270 度（可通过 --no-whole-rotation 关闭）
+     2. 随机整体旋转 0/90/180/270 度（可通过 --no-whole-rotation 关闭）
+     3. 以下底边中点为中心随机小角度旋转，保持当前画布尺寸（BILINEAR 插值）
      4. 随机透视变换（设 PERSPECTIVE_DISTORTION=0 关闭）
      5. 随机裁切（模拟构图变化）
      6. 用纯白背景填充几何变换产生的空白区域
@@ -384,14 +405,15 @@ def preprocess_image(
     """
     with Image.open(source) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
+        if enable_whole_rotation:
+            image = whole_rotate(image, rng)
         image = image.rotate(
             rng.uniform(*ROTATION_RANGE),
             resample=Image.Resampling.BILINEAR,
-            expand=True,
+            expand=False,
+            center=geometry_anchor(image),
             fillcolor=(255, 255, 255),
         )
-        if enable_whole_rotation:
-            image = whole_rotate(image, rng)
         if PERSPECTIVE_H_ANGLE_RANGE != (0, 0) or PERSPECTIVE_V_ANGLE_RANGE != (0, 0):
             image = perspective_transform(image, rng, PERSPECTIVE_H_ANGLE_RANGE, PERSPECTIVE_V_ANGLE_RANGE)
         image = random_crop(image, rng)
@@ -627,6 +649,7 @@ def write_summary(
             "applied_splits": ["train", "val", "test"],
             "output_size": [args.target_size, args.target_size],
             "rotation_range_degrees": list(ROTATION_RANGE),
+            "geometry_anchor_ratio": list(GEOMETRY_ANCHOR_RATIO),
             "enabled": {
                 "whole_rotation": not args.no_whole_rotation,
             },
