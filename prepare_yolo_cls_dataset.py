@@ -32,7 +32,7 @@ EXCLUDED_DIRS = {
 }
 
 # 输出图片统一尺寸（宽, 高），单位像素
-TARGET_SIZE = (32,32)
+TARGET_SIZE = (64,64)
 ENABLE_WHOLE_ROTATION = False          # 是否启用整体旋转增强（0/90/180/270 度）
 
 # 数据增强参数
@@ -41,17 +41,22 @@ GEOMETRY_ANCHOR_RATIO = (0.5, 1.0)   # 几何变换锚点比例：下底边中�
 PERSPECTIVE_H_ANGLE_RANGE = (-4,4)   # 透视水平偏转角范围（度），正值=向左旋转（右边变窄），负值=向右旋转（左边变窄）
 PERSPECTIVE_V_ANGLE_RANGE = (-4.0, 0)     # 透视竖直偏转角范围（度），正值=向上旋转（下边变窄，俯视效果），负值=向下旋转（上边变窄，仰视效果）
 CROP_SCALE_RANGE = (0.8, 1.2)         # 随机裁切缩放比例
-TRANSLATION_RATIO = 0.04              # 随机平移比例（相对原图尺寸）
+TRANSLATION_RATIO = 0.02              # 随机平移比例（相对原图尺寸）
 
 BRIGHTNESS_RANGE = (0.7, 0.9)         # 亮度调整范围（<1 变暗，>1 变亮，模拟不同曝光条件）
 CONTRAST_RANGE = (0.8, 2.5)           # 对比度调整范围（>1 增强对比）
 SATURATION_RANGE = (0.65, 0.9)         # 饱和度调整范围（<1 降低饱和度，>1 增强饱和度）
 
-SHARPNESS_RANGE = (0.8, 3.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
-BLUR_RADIUS_RANGE = (5, 10)          # 高斯模糊半径范围（像素）
-NOISE_AMOUNT_RANGE = (10, 40)          # 高斯噪声强度范围
-COLOR_NOISE_STD_RANGE = (40.0, 60.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
-JPEG_QUALITY_RANGE = (5, 20)         # JPEG 压缩质量范围（模拟传输压缩损失）
+SHARPNESS_RANGE = (1, 3.0)          # 锐化调整范围（<1 变模糊，>1 变锐利，0=完全模糊）
+
+# —— 以下退化在缩放到目标尺寸(TARGET_SIZE)之后执行，参数按目标像素(如 64px)标定 ——
+# 低分辨率摄像头模拟：先降采样到 target 的该比例，再用双线性放大回 target，
+# 物理性丢弃高频细节（比单纯加模糊更接近真实低清传感器）。
+LOW_RES_SCALE_RANGE = (0.7, 0.9)     # 降采样比例范围（相对目标尺寸），0.35≈64→22px 再放大回 64
+GAUSSIAN_BLUR_RANGE = (0, 0.2)       # 目标尺度高斯模糊半径（像素），模拟镜头/透视矫正插值模糊
+NOISE_AMOUNT_RANGE = (5, 15)          # 高斯噪声强度范围
+COLOR_NOISE_STD_RANGE = (5.0, 12.0)   # 彩色高斯噪声标准差（像素加性扰动，越大彩色颗粒越明显）
+JPEG_QUALITY_RANGE = (100, 100)         # JPEG 压缩质量范围（模拟传输压缩损失）
 
 
 def parse_args() -> argparse.Namespace:
@@ -269,6 +274,25 @@ def random_crop(image: Image.Image, rng: random.Random) -> Image.Image:
     return crop
 
 
+def downscale_upscale(image: Image.Image, rng: random.Random) -> Image.Image:
+    """
+    低分辨率摄像头模拟：先把图片降采样到目标尺寸的一个较小比例（BILINEAR 平均掉
+    高频细节），再用 BILINEAR 放大回原尺寸。
+
+    与单纯加模糊不同，这一步会真正丢弃高频信息——放大时无法恢复，从而复现
+    低清传感器下"字符边缘发糊、细笔画糊成一团"的观感。应在图片已缩到
+    TARGET_SIZE 之后调用，比例才与实车 imgsz 对应。
+    """
+    width, height = image.size
+    scale = rng.uniform(*LOW_RES_SCALE_RANGE)
+    if scale >= 0.999:
+        return image
+    low_w = max(1, int(round(width * scale)))
+    low_h = max(1, int(round(height * scale)))
+    small = image.resize((low_w, low_h), Image.Resampling.BILINEAR)
+    return small.resize((width, height), Image.Resampling.BILINEAR)
+
+
 def add_noise(image: Image.Image, rng: random.Random) -> Image.Image:
     """添加随机高斯噪声，模拟摄像头传感器噪点"""
     noise_amount = rng.randint(*NOISE_AMOUNT_RANGE)
@@ -390,21 +414,27 @@ def preprocess_image(
 ) -> Image.Image:
     """
     对单张图片执行完整预处理流程（数据增强）：
+
+    【几何 / 色彩阶段】在原图分辨率上做，保证插值质量：
      1. 读取图片，根据 EXIF 方向信息自动旋转摆正，转为 RGB
      2. 随机整体旋转 0/90/180/270 度（可通过 --no-whole-rotation 关闭）
      3. 以下底边中点为中心随机小角度旋转，保持当前画布尺寸（BILINEAR 插值）
-     4. 随机透视变换（设 PERSPECTIVE_DISTORTION=0 关闭）
+     4. 随机透视变换（模拟摄像头偏转 + 矫正）
      5. 随机裁切（模拟构图变化）
-     6. 用纯白背景填充几何变换产生的空白区域
-     7. 随机调整亮度、对比度、饱和度（设 SATURATION_RANGE=(1,1) 关闭）
-     8. 随机锐化（设 SHARPNESS_RANGE=(1,1) 关闭）
-     9. 随机模糊
-    10. 添加随机高斯噪声和彩色噪声
-    11. 模拟 JPEG 压缩伪影（设 --jpeg-quality 100 100 关闭）
-    12. 缩放到统一目标尺寸
+     6. 随机调整亮度、对比度、饱和度
+     7. 随机锐化
+
+    【退化阶段】先缩到目标尺寸，再在目标尺度上按真实 imgsz 施加退化，
+    避免最后一次 LANCZOS 缩放把噪声/压缩/模糊重新抹平：
+     8. 缩放到统一目标尺寸（LANCZOS）
+     9. 低分辨率降采样再升采样（真正丢弃高频细节，模拟低清摄像头）
+    10. 目标尺度高斯模糊（模拟镜头/透视矫正插值模糊）
+    11. 添加高斯噪声 + 彩色噪声（低清后颗粒才明显）
+    12. 模拟 JPEG 压缩伪影（设 --jpeg-quality 100 100 关闭）
     """
     with Image.open(source) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
+        # —— 几何 / 色彩阶段：原图分辨率 ——
         if enable_whole_rotation:
             image = whole_rotate(image, rng)
         image = image.rotate(
@@ -421,12 +451,17 @@ def preprocess_image(
         image = ImageEnhance.Contrast(image).enhance(rng.uniform(*CONTRAST_RANGE))
         image = ImageEnhance.Color(image).enhance(rng.uniform(*SATURATION_RANGE))
         image = ImageEnhance.Sharpness(image).enhance(rng.uniform(*SHARPNESS_RANGE))
-        blur_radius = rng.uniform(*BLUR_RADIUS_RANGE)
-        image = image.filter(ImageFilter.BoxBlur(radius=blur_radius))
+
+        # —— 退化阶段：先缩到目标尺寸，再在目标尺度上退化 ——
+        image = image.resize(target_size, Image.Resampling.LANCZOS)
+        image = downscale_upscale(image, rng)
+        blur_radius = rng.uniform(*GAUSSIAN_BLUR_RANGE)
+        if blur_radius > 0:
+            image = image.filter(ImageFilter.GaussianBlur(radius=blur_radius))
         image = add_noise(image, rng)
         image = add_color_noise(image, rng)
         image = simulate_jpeg_compress(image, rng, jpeg_quality_range)
-        return image.resize(target_size, Image.Resampling.LANCZOS)
+        return image
 
 
 def save_processed_image(image: Image.Image, target: Path) -> None:
@@ -661,7 +696,8 @@ def write_summary(
             "contrast_range": list(CONTRAST_RANGE),
             "saturation_range": list(SATURATION_RANGE),
             "sharpness_range": list(SHARPNESS_RANGE),
-            "blur_radius_range": list(BLUR_RADIUS_RANGE),
+            "low_res_scale_range": list(LOW_RES_SCALE_RANGE),
+            "gaussian_blur_range": list(GAUSSIAN_BLUR_RANGE),
             "noise_amount_range": list(NOISE_AMOUNT_RANGE),
             "color_noise_std_range": list(COLOR_NOISE_STD_RANGE),
             "jpeg_quality_range": list(JPEG_QUALITY_RANGE),
